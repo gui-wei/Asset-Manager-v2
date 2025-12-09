@@ -1,0 +1,7 @@
+{
+  "name": "Copy of Smart Asset Manager",
+  "description": "A Wechat-Mini-Program-style asset management app with AI earnings recognition, portfolio visualization, and smart recording.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
