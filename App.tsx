@@ -1,4 +1,7 @@
-
+{
+type: "file",
+fileName: "gui-wei/asset-manager-v2/Asset-Manager-v2-839a3cdbb571849521450816574d02cdde1e29e1/App.tsx",
+fullContent: `
 import React, { useState, useEffect, useRef } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { Plus, Scan, ChevronDown, HelpCircle, History, Calendar, Wallet, Pencil, X, TrendingUp, RefreshCw, Camera, Trash2, Settings, AlertTriangle, Sparkles } from 'lucide-react';
@@ -51,7 +54,7 @@ const consolidateAssets = (assets: Asset[]): Asset[] => {
   
   assets.forEach(asset => {
      // Normalize key
-     const key = `${asset.productName.trim()}|${asset.currency}`;
+     const key = \`\${asset.productName.trim()}|\${asset.currency}\`;
      
      if (uniqueMap.has(key)) {
         const existing = uniqueMap.get(key)!;
@@ -63,7 +66,7 @@ const consolidateAssets = (assets: Asset[]): Asset[] => {
         const seenTx = new Set<string>();
         const distinctHistory: Transaction[] = [];
         mergedHistory.forEach(tx => {
-           const sig = `${tx.date}|${tx.type}|${tx.amount.toFixed(2)}`;
+           const sig = \`\${tx.date}|\${tx.type}|\${tx.amount.toFixed(2)}\`;
            if (!seenTx.has(sig)) {
               seenTx.add(sig);
               distinctHistory.push(tx);
@@ -309,14 +312,14 @@ const AssetItem: React.FC<{
         >
           {/* Left Side: flex-1 ensures it takes available space, min-w-0 allows truncation */}
           <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0
-              ${asset.type === AssetType.FUND ? 'bg-gradient-to-br from-blue-400 to-blue-600' : asset.type === AssetType.GOLD ? 'bg-gradient-to-br from-yellow-400 to-yellow-600' : 'bg-gradient-to-br from-purple-400 to-purple-600'}`}>
+            <div className={\`w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0
+              \${asset.type === AssetType.FUND ? 'bg-gradient-to-br from-blue-400 to-blue-600' : asset.type === AssetType.GOLD ? 'bg-gradient-to-br from-yellow-400 to-yellow-600' : 'bg-gradient-to-br from-purple-400 to-purple-600'}\`}>
               {asset.type === AssetType.FUND ? '基' : asset.type === AssetType.GOLD ? '金' : '其'}
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="font-bold text-gray-800 text-base break-words leading-tight">{asset.productName}</h3>
               <p className="text-xs text-gray-400 mt-0.5 truncate">
-                {asset.sevenDayYield ? `七日年化 ${asset.sevenDayYield}%` : asset.remark || '无备注'} · {asset.currency}
+                {asset.sevenDayYield ? \`七日年化 \${asset.sevenDayYield}%\` : asset.remark || '无备注'} · {asset.currency}
               </p>
             </div>
           </div>
@@ -327,7 +330,7 @@ const AssetItem: React.FC<{
               <p className="font-bold text-gray-900 text-lg font-mono tracking-tight leading-tight">
                 {currencySymbol} {asset.currentAmount.toLocaleString()}
               </p>
-              <p className={`text-xs font-bold ${asset.totalEarnings >= 0 ? 'text-red-500' : 'text-green-500'}`}>
+              <p className={\`text-xs font-bold \${asset.totalEarnings >= 0 ? 'text-red-500' : 'text-green-500'}\`}>
                 {asset.totalEarnings >= 0 ? '+' : ''}{currencySymbol} {asset.totalEarnings.toLocaleString()}
               </p>
             </div>
@@ -335,7 +338,7 @@ const AssetItem: React.FC<{
         </div>
 
         {/* Drawer Content */}
-        <div className={`overflow-hidden transition-all duration-300 ease-in-out bg-gray-50 border-t border-gray-100 ${isOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+        <div className={\`overflow-hidden transition-all duration-300 ease-in-out bg-gray-50 border-t border-gray-100 \${isOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}\`}>
           <div className="p-4">
             <div className="flex justify-between items-center mb-3 px-1">
               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -364,12 +367,12 @@ const AssetItem: React.FC<{
                 asset.history.map(record => (
                   <div key={record.id} className="flex justify-between items-center text-sm bg-white p-3 rounded-lg shadow-sm border border-gray-100">
                     <div className="flex items-center gap-3">
-                      <div className={`w-1.5 h-1.5 rounded-full ${record.type === 'deposit' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <div className={\`w-1.5 h-1.5 rounded-full \${record.type === 'deposit' ? 'bg-green-500' : 'bg-red-500'}\`}></div>
                       <span className="text-gray-400 text-xs">{record.date}</span>
                       <span className="text-gray-700 font-medium truncate max-w-[80px] sm:max-w-[120px]">{record.description}</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className={`font-mono font-bold ${record.type === 'earning' ? 'text-red-500' : 'text-green-600'}`}>
+                      <span className={\`font-mono font-bold \${record.type === 'earning' ? 'text-red-500' : 'text-green-600'}\`}>
                         {record.type === 'earning' ? '+' : ''}{record.amount}
                       </span>
                       <button 
@@ -672,7 +675,7 @@ export default function App() {
                         resolve(records || []);
                     } catch (err: any) {
                          if (err.message === "GEMINI_REGION_ERROR") {
-                             alert("AI 服务连接失败：当前网络环境不支持 (403 Region not supported)。\n请尝试切换 VPN 节点至支持地区 (如美国/新加坡)。");
+                             alert("AI 服务连接失败：当前网络环境不支持 (403 Region not supported)。\\n请尝试切换 VPN 节点至支持地区 (如美国/新加坡)。");
                         }
                         console.error("Error analyzing file", file.name, err);
                         resolve([]);
@@ -718,7 +721,7 @@ export default function App() {
                  
                  if (isWeakName && batchContext.has(currency)) {
                      const inferredName = batchContext.get(currency)!;
-                     console.log(`Context Inference: Associating unnamed ${currency} record to '${inferredName}'`);
+                     console.log(\`Context Inference: Associating unnamed \${currency} record to '\${inferredName}'\`);
                      record.productName = inferredName;
                  }
              });
@@ -735,7 +738,7 @@ export default function App() {
              allNewRecords.forEach(record => {
                  if (!record.productName) record.productName = "未命名产品";
                  const currency = (record.currency as Currency) || 'CNY';
-                 const key = `${record.productName}|${currency}`;
+                 const key = \`\${record.productName}|\${currency}\`;
 
                  if (!groupedRecords.has(key)) {
                      groupedRecords.set(key, {
@@ -786,7 +789,7 @@ export default function App() {
                          if (potentialMatches.length === 1) {
                              // Found exactly one candidate -> Merge into it
                              assetIndex = potentialMatches[0].originalIndex;
-                             console.log(`Smart Merge: Merging records for '${productName}' into existing asset '${updatedAssets[assetIndex].institution} - ${productName}'`);
+                             console.log(\`Smart Merge: Merging records for '\${productName}' into existing asset '\${updatedAssets[assetIndex].institution} - \${productName}'\`);
                          }
                      }
                  }
@@ -858,17 +861,17 @@ export default function App() {
             setShowAIModal(false);
             
             if (totalRecordsProcessed > 0) {
-                let msg = `处理完成！\n新增记录: ${totalRecordsProcessed} 条`;
-                if (createdCount > 0) msg += `\n新建资产: ${createdCount} 个`;
-                if (updatedCount > 0) msg += `\n更新资产: ${updatedCount} 个`;
+                let msg = \`处理完成！\\n新增记录: \${totalRecordsProcessed} 条\`;
+                if (createdCount > 0) msg += \`\\n新建资产: \${createdCount} 个\`;
+                if (updatedCount > 0) msg += \`\\n更新资产: \${updatedCount} 个\`;
                 alert(msg);
             } else {
-                alert(`所有识别到的记录均已存在。`);
+                alert(\`所有识别到的记录均已存在。\`);
             }
         } else {
              // Only show this generic alert if no records found AND no errors alerted
              if (!allNewRecords || allNewRecords.length === 0) {
-                 alert("未能识别图片中的有效信息，请确保截图清晰。");
+                 alert("未能识别图片中的有效信息，请确保截图清晰，或检查 API Key 是否配置正确。");
              }
         }
 
@@ -963,7 +966,7 @@ export default function App() {
                             stroke="none"
                          >
                             {chartData.map((entry, index) => (
-                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                               <Cell key={\`cell-\${index}\`} fill={COLORS[index % COLORS.length]} />
                             ))}
                          </Pie>
                       </PieChart>
@@ -1375,4 +1378,6 @@ export default function App() {
 
     </div>
   );
+}
+`
 }
