@@ -1,8 +1,13 @@
-
-import { GoogleGenAI, Type } from "@google/genai";
+{
+type: "file",
+fileName: "gui-wei/asset-manager-v2/Asset-Manager-v2-839a3cdbb571849521450816574d02cdde1e29e1/services/gemini.ts",
+fullContent: `
+import { GoogleGenAI, SchemaType } from "@google/genai";
 
 // Initialize the client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Ensure we handle the case where API_KEY might be undefined/empty string during initialization
+const apiKey = process.env.API_KEY || '';
+const ai = new GoogleGenAI({ apiKey });
 
 export interface EarningsRecord {
   date: string; // YYYY-MM-DD
@@ -60,6 +65,11 @@ const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promi
 };
 
 export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRecord[]> => {
+  if (!apiKey) {
+      console.error("Gemini API Key is missing. Please check your .env or configuration.");
+      return [];
+  }
+
   try {
     const model = 'gemini-2.5-flash';
     
@@ -77,7 +87,7 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
     const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
     const todayStr = today.toISOString().split('T')[0];
 
-    const prompt = `
+    const prompt = \`
       Analyze this screenshot of an investment app (Alipay, Bank Apps, etc.).
       
       YOUR TASK:
@@ -98,8 +108,8 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
       1. **Institution**: Look at the top header (e.g., "Alipay", "ICBC").
       2. **Date**: 
          - Format: YYYY-MM-DD.
-         - If year is missing in a calendar view, look for "202x" headers. Default to ${year} if absolutely no year found.
-         - "Yesterday"=${yesterdayStr}, "Today"=${todayStr}.
+         - If year is missing in a calendar view, look for "202x" headers. Default to \${year} if absolutely no year found.
+         - "Yesterday"=\${yesterdayStr}, "Today"=\${todayStr}.
       3. **Type Classification**:
          - **deposit**: "Buy", "Purchase", "Success", "买入", "申购", "交易成功".
          - **earning**: "Income", "Profit", "Yield", "收益", "盈亏", "+xx.xx".
@@ -109,7 +119,7 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
          - Default to "CNY" only if no other currency indicators exist.
 
       Output JSON with a "records" array.
-    `;
+    \`;
 
     const makeRequest = async () => {
         return await ai.models.generateContent({
@@ -123,20 +133,20 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
             config: {
                 responseMimeType: "application/json",
                 responseSchema: {
-                type: Type.OBJECT,
+                type: SchemaType.OBJECT,
                 properties: {
                     records: {
-                    type: Type.ARRAY,
+                    type: SchemaType.ARRAY,
                     items: {
-                        type: Type.OBJECT,
+                        type: SchemaType.OBJECT,
                         properties: {
-                        productName: { type: Type.STRING, description: "Full Name of the product/fund" },
-                        institution: { type: Type.STRING, description: "App or Bank name" },
-                        amount: { type: Type.NUMBER, description: "Transaction amount (absolute value)" },
-                        date: { type: Type.STRING, description: "YYYY-MM-DD" },
-                        type: { type: Type.STRING, enum: ["deposit", "earning"] },
-                        assetType: { type: Type.STRING, enum: ["Fund", "Gold", "Other"] },
-                        currency: { type: Type.STRING, enum: ["CNY", "USD", "HKD"] }
+                        productName: { type: SchemaType.STRING, description: "Full Name of the product/fund" },
+                        institution: { type: SchemaType.STRING, description: "App or Bank name" },
+                        amount: { type: SchemaType.NUMBER, description: "Transaction amount (absolute value)" },
+                        date: { type: SchemaType.STRING, description: "YYYY-MM-DD" },
+                        type: { type: SchemaType.STRING, enum: ["deposit", "earning"] },
+                        assetType: { type: SchemaType.STRING, enum: ["Fund", "Gold", "Other"] },
+                        currency: { type: SchemaType.STRING, enum: ["CNY", "USD", "HKD"] }
                         },
                         required: ["amount", "date", "type"]
                     }
@@ -151,7 +161,9 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
     // First attempt
     try {
         const response = await makeRequest();
-        const text = response.text;
+        const text = response.text(); // Ensure we call text() as a method if required by version, or property
+        // The new SDK often uses response.text() method or response.text property. 
+        // Adapting to standard accessing:
         if (!text) return [];
         const result = JSON.parse(text) as { records: AIAssetRecord[] };
         return result.records || [];
@@ -160,7 +172,7 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
         if (e.message?.includes('500') || e.message?.includes('503')) {
              console.warn("Retrying Gemini request due to server error...");
              const response = await makeRequest();
-             const text = response.text;
+             const text = response.text();
              if (!text) return [];
              const result = JSON.parse(text) as { records: AIAssetRecord[] };
              return result.records || [];
@@ -177,3 +189,5 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
     return [];
   }
 };
+`
+}
