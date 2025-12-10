@@ -1,17 +1,48 @@
-{
-type: "file",
-fileName: "gui-wei/asset-manager-v2/Asset-Manager-v2-839a3cdbb571849521450816574d02cdde1e29e1/App.tsx",
-fullContent: `
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Plus, Scan, ChevronDown, HelpCircle, History, Calendar, Wallet, Pencil, X, TrendingUp, RefreshCw, Camera, Trash2, Settings, AlertTriangle, Sparkles } from 'lucide-react';
-import { Asset, AssetType, Transaction, Currency } from './types';
-import * as storage from './services/storage';
-import * as gemini from './services/gemini';
-import SmartInput from './components/SmartInput';
-import EarningsCalendar from './components/EarningsCalendar';
+import { 
+  Plus, Scan, ChevronDown, HelpCircle, History, Calendar, Wallet, 
+  Pencil, X, TrendingUp, RefreshCw, Camera, Trash2, Settings, 
+  AlertTriangle, Sparkles, ArrowRightLeft, Loader2
+} from 'lucide-react';
 
-const COLORS = ['#3b82f6', '#fbbf24', '#a855f7', '#f87171']; // Blue, Gold, Purple
+/**
+ * --- TYPES & CONSTANTS ---
+ */
+
+const COLORS = ['#3b82f6', '#fbbf24', '#a855f7', '#f87171']; // Blue, Gold, Purple, Red
+
+enum AssetType {
+  FUND = 'Fund',
+  GOLD = 'Gold',
+  OTHER = 'Other'
+}
+
+type Currency = 'CNY' | 'USD' | 'HKD';
+
+interface Transaction {
+  id: string;
+  date: string; // ISO Date string YYYY-MM-DD
+  type: 'deposit' | 'earning';
+  amount: number;
+  currency?: Currency; // Each transaction can technically have its own currency
+  description?: string;
+}
+
+interface Asset {
+  id: string;
+  institution: string; 
+  productName: string; 
+  type: AssetType;
+  currency: Currency; // Principal/Holding Currency
+  earningsCurrency?: Currency; // Separate Currency for Earnings (e.g., Fund is USD, but pays yield in CNY)
+  remark?: string;
+  currentAmount: number; 
+  totalEarnings: number; 
+  sevenDayYield?: number; 
+  history: Transaction[];
+  dailyEarnings: Record<string, number>;
+}
 
 // Exchange rates relative to CNY
 const RATES: Record<Currency, number> = {
@@ -20,93 +51,339 @@ const RATES: Record<Currency, number> = {
   HKD: 0.92
 };
 
-// --- Helper Functions ---
+const getSymbol = (c: Currency) => c === 'USD' ? '$' : c === 'HKD' ? 'HK$' : '¥';
 
-const recalculateAsset = (asset: Asset): Asset => {
-  let currentAmount = 0;
-  let totalEarnings = 0;
-  const dailyEarnings: Record<string, number> = {};
+/**
+ * --- SERVICES: STORAGE ---
+ */
 
-  // Sort history by date descending
-  const sortedHistory = [...asset.history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+const STORAGE_KEY = 'wechat_asset_manager_data_v2'; // Bumped version for new schema
 
-  sortedHistory.forEach(t => {
-    currentAmount += t.amount;
-    
-    if (t.type === 'earning') {
-      totalEarnings += t.amount;
-      const date = t.date;
-      dailyEarnings[date] = (dailyEarnings[date] || 0) + t.amount;
+const saveAssets = (assets: Asset[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(assets));
+  } catch (e) {
+    console.error("Failed to save to local storage", e);
+  }
+};
+
+const getAssets = (): Asset[] => {
+  try {
+    const data = localStorage.getItem(STORAGE_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.error("Failed to load from local storage", e);
+    return [];
+  }
+};
+
+const getUniqueProductNames = (assets: Asset[]): string[] => {
+  const names = new Set<string>();
+  assets.forEach(a => names.add(a.productName));
+  return Array.from(names);
+};
+
+/**
+ * --- SERVICES: GEMINI AI ---
+ */
+
+interface AIAssetRecord {
+  date: string;
+  amount: number;
+  type: 'deposit' | 'earning';
+  productName?: string;
+  institution?: string;
+  currency?: 'CNY' | 'USD' | 'HKD';
+  assetType?: 'Fund' | 'Gold' | 'Other';
+}
+
+const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promise<string> => {
+  return new Promise((resolve) => {
+    if (!base64Str || !base64Str.startsWith('data:image')) {
+        resolve(base64Str);
+        return;
     }
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(base64Str);
+        return;
+      }
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(base64Str);
   });
-
-  return {
-    ...asset,
-    currentAmount,
-    totalEarnings,
-    dailyEarnings,
-    history: sortedHistory
-  };
 };
 
-const consolidateAssets = (assets: Asset[]): Asset[] => {
-  const uniqueMap = new Map<string, Asset>();
+const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRecord[]> => {
+  const apiKey = ""; 
   
-  assets.forEach(asset => {
-     // Normalize key
-     const key = \`\${asset.productName.trim()}|\${asset.currency}\`;
-     
-     if (uniqueMap.has(key)) {
-        const existing = uniqueMap.get(key)!;
-        
-        // Merge histories
-        const mergedHistory = [...existing.history, ...asset.history];
-        
-        // Remove exact duplicates in history (same date, type, amount)
-        const seenTx = new Set<string>();
-        const distinctHistory: Transaction[] = [];
-        mergedHistory.forEach(tx => {
-           const sig = \`\${tx.date}|\${tx.type}|\${tx.amount.toFixed(2)}\`;
-           if (!seenTx.has(sig)) {
-              seenTx.add(sig);
-              distinctHistory.push(tx);
-           }
-        });
-        existing.history = distinctHistory;
+  if (!base64Image) return [];
 
-        // Update Institution: prefer the one that isn't "Unknown" or "未命名"
-        const isExistingGeneric = !existing.institution || existing.institution === '未命名渠道' || existing.institution === 'Auto-created';
-        const isNewSpecific = asset.institution && asset.institution !== '未命名渠道';
-        
-        if (isExistingGeneric && isNewSpecific) {
-            existing.institution = asset.institution;
-        }
+  try {
+    const compressedDataUrl = await compressImage(base64Image);
+    const parts = compressedDataUrl.split(',');
+    const cleanBase64 = parts.length > 1 ? parts[1] : compressedDataUrl;
+    
+    const todayStr = new Date().toISOString().split('T')[0];
+    const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split('T')[0];
 
-        // Keep the merged asset
-        uniqueMap.set(key, existing);
-     } else {
-        uniqueMap.set(key, asset);
-     }
-  });
+    const prompt = `
+      Analyze this screenshot of an investment app (Alipay, Bank Apps, etc.).
+      
+      YOUR TASK: Extract a list of asset transactions or earnings.
+      
+      CRITICAL - PURCHASE CONFIRMATION SCREENS:
+      If the image shows "Purchase Successful", "Buying", "Order Confirmed" (e.g., "购买确认成功", "交易成功"):
+      1. This is a **'deposit'** type transaction.
+      2. You MUST extract the **FULL Product Name**.
+      3. Extract the Amount and Currency.
+      4. Extract the Date.
 
-  // Recalculate totals for all consolidated assets
-  return Array.from(uniqueMap.values()).map(recalculateAsset);
+      EARNINGS LISTS / CALENDARS:
+      1. Extract daily earnings rows.
+      2. If Product Name is visible, extract it.
+      
+      RULES:
+      1. **Institution**: Look at header (e.g., "Alipay", "ICBC").
+      2. **Date**: YYYY-MM-DD. "Yesterday"=${yesterdayStr}, "Today"=${todayStr}.
+      3. **Type**: "deposit" (Buy, Purchase, 买入) or "earning" (Income, Profit, 收益, +xx.xx).
+      4. **Currency**: default "CNY" unless "USD", "HKD" found.
+
+      Output JSON ONLY with this schema:
+      {
+        "records": [
+          {
+            "productName": "string",
+            "institution": "string",
+            "amount": number,
+            "date": "YYYY-MM-DD",
+            "type": "deposit" | "earning",
+            "assetType": "Fund" | "Gold" | "Other",
+            "currency": "CNY" | "USD" | "HKD"
+          }
+        ]
+      }
+    `;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } }
+            ]
+          }],
+          generationConfig: {
+            responseMimeType: "application/json"
+          }
+        })
+      }
+    );
+
+    if (!response.ok) throw new Error(`API Error: ${response.status}`);
+    
+    const result = await response.json();
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!text) return [];
+    
+    const parsed = JSON.parse(text);
+    return parsed.records || [];
+
+  } catch (error) {
+    console.error("Gemini Analysis Failed:", error);
+    throw error;
+  }
 };
 
-// --- Components ---
+/**
+ * --- SUB-COMPONENTS ---
+ */
 
-// Edit Asset Info Modal
+// 1. Smart Input
+const SmartInput: React.FC<{
+  label: string;
+  value: string;
+  onChange: (val: string) => void;
+  suggestions: string[];
+  placeholder?: string;
+}> = ({ label, value, onChange, suggestions, placeholder }) => {
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const filteredSuggestions = suggestions.filter(s => 
+    s.toLowerCase().includes(value.toLowerCase()) && s !== value
+  );
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className="mb-4 relative" ref={wrapperRef}>
+      <label className="block text-gray-700 text-sm font-bold mb-1">{label}</label>
+      <input
+        type="text"
+        className="shadow-sm appearance-none border rounded w-full py-3 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-[#07c160]"
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setShowSuggestions(true);
+        }}
+        onFocus={() => setShowSuggestions(true)}
+        placeholder={placeholder}
+      />
+      
+      {showSuggestions && value && filteredSuggestions.length > 0 && (
+        <div className="absolute z-10 w-full bg-white border border-gray-200 mt-1 rounded-md shadow-lg max-h-40 overflow-y-auto">
+          {filteredSuggestions.map((suggestion, idx) => (
+            <div
+              key={idx}
+              className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm text-gray-600"
+              onClick={() => {
+                onChange(suggestion);
+                setShowSuggestions(false);
+              }}
+            >
+              <span className="text-[#07c160] mr-2">⟲</span>
+              {suggestion}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// 2. Earnings Calendar
+const EarningsCalendar: React.FC<{
+  asset: Asset;
+  onClose: () => void;
+}> = ({ asset, onClose }) => {
+  const today = new Date();
+  const [currentDate, setCurrentDate] = useState(today);
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0 is Sunday
+
+  const days = [];
+  for (let i = 0; i < firstDayOfMonth; i++) {
+    days.push(null);
+  }
+  for (let i = 1; i <= daysInMonth; i++) {
+    days.push(i);
+  }
+
+  const getEventsForDay = (day: number) => {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const earning = asset.dailyEarnings[dateStr] || 0;
+    
+    const deposits = asset.history
+      .filter(t => t.type === 'deposit' && t.date === dateStr)
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    return { earning, deposits };
+  };
+
+  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
+  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+
+  const earningsSymbol = getSymbol(asset.earningsCurrency || asset.currency);
+  const principalSymbol = getSymbol(asset.currency);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+      <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+        <div className="bg-[#07c160] p-4 flex justify-between items-center text-white">
+          <h3 className="font-bold text-lg">{asset.productName} 收益日历</h3>
+          <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full">
+            <X size={24} />
+          </button>
+        </div>
+        
+        <div className="p-4">
+          <div className="flex justify-between items-center mb-4">
+            <button onClick={prevMonth} className="p-2 hover:bg-gray-100 rounded-full">&lt;</button>
+            <span className="font-bold text-gray-800">{year}年 {month + 1}月</span>
+            <button onClick={nextMonth} className="p-2 hover:bg-gray-100 rounded-full">&gt;</button>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 text-center mb-2">
+            {['日', '一', '二', '三', '四', '五', '六'].map(d => (
+              <div key={d} className="text-xs text-gray-400">{d}</div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1">
+            {days.map((day, idx) => {
+              if (!day) return <div key={`empty-${idx}`} />;
+              const { earning, deposits } = getEventsForDay(day);
+              const hasEarning = earning !== 0;
+              const hasDeposit = deposits > 0;
+              
+              return (
+                <div key={day} className="flex flex-col items-center justify-start pt-1 h-14 rounded-lg bg-gray-50 border border-gray-100 relative overflow-hidden">
+                  <span className="text-[10px] font-medium text-gray-400 mb-0.5">{day}</span>
+                  {hasEarning && (
+                     <span className={`text-[9px] font-bold leading-tight ${earning > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                       {earning > 0 ? '+' : ''}{earningsSymbol}{earning.toFixed(2)}
+                     </span>
+                  )}
+                  {hasDeposit && (
+                     <span className="text-[9px] font-bold text-blue-500 leading-tight">
+                       +{principalSymbol}{deposits.toLocaleString()}
+                     </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// 3. Edit Asset Modal
 const EditAssetInfoModal: React.FC<{
   asset: Asset;
   onSave: (asset: Asset) => void;
   onClose: () => void;
 }> = ({ asset, onSave, onClose }) => {
-  // Use local state with strings for numbers to allow smooth decimal typing
   const [formData, setFormData] = useState({
     institution: asset.institution,
     productName: asset.productName,
     type: asset.type,
     currency: asset.currency,
+    earningsCurrency: asset.earningsCurrency || asset.currency,
     sevenDayYield: asset.sevenDayYield?.toString() || '',
     remark: asset.remark || ''
   });
@@ -114,12 +391,11 @@ const EditAssetInfoModal: React.FC<{
   const handleSave = () => {
     onSave({
       ...asset,
-      institution: formData.institution,
-      productName: formData.productName,
-      type: formData.type,
-      currency: formData.currency,
+      ...formData,
       sevenDayYield: parseFloat(formData.sevenDayYield) || 0,
-      remark: formData.remark
+      currency: formData.currency as Currency,
+      earningsCurrency: formData.earningsCurrency as Currency,
+      type: formData.type as AssetType
     });
   };
 
@@ -167,8 +443,9 @@ const EditAssetInfoModal: React.FC<{
                 <option value={AssetType.OTHER}>其他</option>
               </select>
             </div>
+            {/* Asset Currency (Principal) */}
             <div>
-              <label className="block text-gray-500 text-xs font-bold mb-1.5">货币种类</label>
+              <label className="block text-gray-500 text-xs font-bold mb-1.5">本金货币</label>
               <select
                 className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none font-bold"
                 value={formData.currency}
@@ -180,6 +457,25 @@ const EditAssetInfoModal: React.FC<{
               </select>
             </div>
           </div>
+          
+           {/* Earnings Currency (Separate) */}
+           <div>
+              <label className="block text-gray-500 text-xs font-bold mb-1.5 flex items-center gap-2">
+                 收益货币 <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-normal">若收益与本金货币不同请修改</span>
+              </label>
+              <div className="relative">
+                <select
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none font-bold"
+                  value={formData.earningsCurrency}
+                  onChange={(e) => setFormData({ ...formData, earningsCurrency: e.target.value as Currency })}
+                >
+                  <option value="CNY">CNY (人民币)</option>
+                  <option value="USD">USD (美元)</option>
+                  <option value="HKD">HKD (港币)</option>
+                </select>
+                <ArrowRightLeft size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
 
           <div className="flex gap-4">
              <div className="flex-1">
@@ -204,25 +500,15 @@ const EditAssetInfoModal: React.FC<{
         </div>
 
         <div className="flex gap-3 mt-8">
-          <button
-            onClick={onClose}
-            className="flex-1 py-3.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-sm"
-          >
-            取消
-          </button>
-          <button
-            onClick={handleSave}
-            className="flex-1 py-3.5 rounded-xl bg-gray-900 text-white font-bold text-sm shadow-lg active:scale-95 transition"
-          >
-            保存修改
-          </button>
+          <button onClick={onClose} className="flex-1 py-3.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-sm">取消</button>
+          <button onClick={handleSave} className="flex-1 py-3.5 rounded-xl bg-gray-900 text-white font-bold text-sm shadow-lg">保存修改</button>
         </div>
       </div>
     </div>
   );
 };
 
-// Edit Transaction Modal Component
+// 4. Edit Transaction Modal
 const EditTransactionModal: React.FC<{ 
   transaction: Transaction, 
   onSave: (t: Transaction) => void, 
@@ -289,7 +575,7 @@ const EditTransactionModal: React.FC<{
   );
 };
 
-// Sub-component for Asset Item (Drawer style)
+// 5. AssetItem Component
 const AssetItem: React.FC<{ 
   asset: Asset, 
   onEditTransaction: (tx: Transaction) => void,
@@ -300,45 +586,46 @@ const AssetItem: React.FC<{
   const [isOpen, setIsOpen] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   
-  const currencySymbol = asset.currency === 'USD' ? '$' : asset.currency === 'HKD' ? 'HK$' : '¥';
+  const principalSymbol = getSymbol(asset.currency);
+  // Default earnings currency to principal currency if not set
+  const earningsCurrency = asset.earningsCurrency || asset.currency;
+  const earningsSymbol = getSymbol(earningsCurrency);
 
   return (
     <>
       <div className="transition-all duration-300">
-        {/* Main Card */}
         <div 
           onClick={() => setIsOpen(!isOpen)}
           className="p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition"
         >
-          {/* Left Side: flex-1 ensures it takes available space, min-w-0 allows truncation */}
           <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
-            <div className={\`w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0
-              \${asset.type === AssetType.FUND ? 'bg-gradient-to-br from-blue-400 to-blue-600' : asset.type === AssetType.GOLD ? 'bg-gradient-to-br from-yellow-400 to-yellow-600' : 'bg-gradient-to-br from-purple-400 to-purple-600'}\`}>
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0
+              ${asset.type === AssetType.FUND ? 'bg-gradient-to-br from-blue-400 to-blue-600' : asset.type === AssetType.GOLD ? 'bg-gradient-to-br from-yellow-400 to-yellow-600' : 'bg-gradient-to-br from-purple-400 to-purple-600'}`}>
               {asset.type === AssetType.FUND ? '基' : asset.type === AssetType.GOLD ? '金' : '其'}
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="font-bold text-gray-800 text-base break-words leading-tight">{asset.productName}</h3>
               <p className="text-xs text-gray-400 mt-0.5 truncate">
-                {asset.sevenDayYield ? \`七日年化 \${asset.sevenDayYield}%\` : asset.remark || '无备注'} · {asset.currency}
+                {asset.sevenDayYield ? `七日年化 ${asset.sevenDayYield}%` : asset.remark || '无备注'} · {asset.currency}
               </p>
             </div>
           </div>
 
-          {/* Right Side: shrink-0 ensures it doesn't get squashed */}
           <div className="flex items-center gap-3 shrink-0">
              <div className="text-right">
+              {/* Display Principal in Asset Currency */}
               <p className="font-bold text-gray-900 text-lg font-mono tracking-tight leading-tight">
-                {currencySymbol} {asset.currentAmount.toLocaleString()}
+                {principalSymbol} {asset.currentAmount.toLocaleString()}
               </p>
-              <p className={\`text-xs font-bold \${asset.totalEarnings >= 0 ? 'text-red-500' : 'text-green-500'}\`}>
-                {asset.totalEarnings >= 0 ? '+' : ''}{currencySymbol} {asset.totalEarnings.toLocaleString()}
+              {/* Display Earnings in Earnings Currency */}
+              <p className={`text-xs font-bold ${asset.totalEarnings >= 0 ? 'text-red-500' : 'text-green-500'}`}>
+                {asset.totalEarnings >= 0 ? '+' : ''}{earningsSymbol} {asset.totalEarnings.toLocaleString()}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Drawer Content */}
-        <div className={\`overflow-hidden transition-all duration-300 ease-in-out bg-gray-50 border-t border-gray-100 \${isOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}\`}>
+        <div className={`overflow-hidden transition-all duration-300 ease-in-out bg-gray-50 border-t border-gray-100 ${isOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
           <div className="p-4">
             <div className="flex justify-between items-center mb-3 px-1">
               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -364,103 +651,152 @@ const AssetItem: React.FC<{
               {asset.history.length === 0 ? (
                  <p className="text-center text-xs text-gray-400 py-4">暂无记录</p>
               ) : (
-                asset.history.map(record => (
-                  <div key={record.id} className="flex justify-between items-center text-sm bg-white p-3 rounded-lg shadow-sm border border-gray-100">
-                    <div className="flex items-center gap-3">
-                      <div className={\`w-1.5 h-1.5 rounded-full \${record.type === 'deposit' ? 'bg-green-500' : 'bg-red-500'}\`}></div>
-                      <span className="text-gray-400 text-xs">{record.date}</span>
-                      <span className="text-gray-700 font-medium truncate max-w-[80px] sm:max-w-[120px]">{record.description}</span>
+                asset.history.map(record => {
+                  // If transaction has explicit currency, use it. Otherwise fallback.
+                  const txCurrency = record.currency || (record.type === 'deposit' ? asset.currency : earningsCurrency);
+                  const txSymbol = getSymbol(txCurrency);
+                  
+                  return (
+                    <div key={record.id} className="flex justify-between items-center text-sm bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-1.5 h-1.5 rounded-full ${record.type === 'deposit' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <span className="text-gray-400 text-xs">{record.date}</span>
+                        <span className="text-gray-700 font-medium truncate max-w-[80px] sm:max-w-[120px]">{record.description}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className={`font-mono font-bold ${record.type === 'earning' ? 'text-red-500' : 'text-green-600'}`}>
+                          {record.type === 'earning' ? '+' : ''} {txSymbol}{record.amount}
+                        </span>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); onEditTransaction(record); }}
+                          className="p-1.5 text-gray-300 hover:text-blue-500 hover:bg-blue-50 rounded transition"
+                        >
+                            <Pencil size={14} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className={\`font-mono font-bold \${record.type === 'earning' ? 'text-red-500' : 'text-green-600'}\`}>
-                        {record.type === 'earning' ? '+' : ''}{record.amount}
-                      </span>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); onEditTransaction(record); }}
-                        className="p-1.5 text-gray-300 hover:text-blue-500 hover:bg-blue-50 rounded transition"
-                      >
-                          <Pencil size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
-            {/* Asset Actions (Edit & Delete) */}
             <div className="mt-4 pt-3 border-t border-gray-100 flex gap-2">
                <button 
-                  onClick={(e) => { 
-                    e.preventDefault(); 
-                    e.stopPropagation(); 
-                    e.nativeEvent.stopImmediatePropagation();
-                    onEditInfo(); 
-                  }}
+                  onClick={(e) => { e.stopPropagation(); onEditInfo(); }}
                   className="flex-1 flex items-center justify-center gap-1.5 text-xs text-blue-500 hover:text-blue-600 transition-colors py-2 rounded-lg hover:bg-blue-50 font-bold bg-blue-50/50 cursor-pointer"
                >
                   <Settings size={14} />
                   <span>修改信息</span>
                </button>
                <button 
-                  type="button"
-                  onClick={(e) => { 
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.nativeEvent.stopImmediatePropagation(); // Ensure click isn't swallowed
-                    onDelete(asset.id); 
-                  }}
+                  onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }}
                   className="flex-1 flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors py-2 rounded-lg hover:bg-red-50 cursor-pointer"
                >
                   <Trash2 size={14} />
                   <span>删除资产</span>
                </button>
             </div>
-
           </div>
         </div>
       </div>
-
-      {showCalendar && (
-        <EarningsCalendar asset={asset} onClose={() => setShowCalendar(false)} />
-      )}
+      {showCalendar && <EarningsCalendar asset={asset} onClose={() => setShowCalendar(false)} />}
     </>
   );
+};
+
+/**
+ * --- MAIN APP COMPONENT ---
+ */
+
+const recalculateAsset = (asset: Asset): Asset => {
+  let currentAmount = 0;
+  let totalEarnings = 0;
+  const dailyEarnings: Record<string, number> = {};
+
+  const sortedHistory = [...asset.history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  sortedHistory.forEach(t => {
+    // Note: We simply sum amounts here. The distinction is visual in the UI.
+    // The assumption is: All Deposits match 'asset.currency', All Earnings match 'asset.earningsCurrency'
+    currentAmount += t.amount;
+    
+    if (t.type === 'earning') {
+      totalEarnings += t.amount;
+      const date = t.date;
+      dailyEarnings[date] = (dailyEarnings[date] || 0) + t.amount;
+    }
+  });
+
+  return {
+    ...asset,
+    currentAmount,
+    totalEarnings,
+    dailyEarnings,
+    history: sortedHistory
+  };
+};
+
+const consolidateAssets = (assets: Asset[]): Asset[] => {
+  const uniqueMap = new Map<string, Asset>();
+  
+  assets.forEach(asset => {
+     const key = `${asset.productName.trim()}|${asset.currency}`;
+     if (uniqueMap.has(key)) {
+        const existing = uniqueMap.get(key)!;
+        const mergedHistory = [...existing.history, ...asset.history];
+        const seenTx = new Set<string>();
+        const distinctHistory: Transaction[] = [];
+        mergedHistory.forEach(tx => {
+           const sig = `${tx.date}|${tx.type}|${tx.amount.toFixed(2)}`;
+           if (!seenTx.has(sig)) {
+              seenTx.add(sig);
+              distinctHistory.push(tx);
+           }
+        });
+        existing.history = distinctHistory;
+        
+        const isExistingGeneric = !existing.institution || existing.institution === '未命名渠道' || existing.institution === 'Auto-created';
+        const isNewSpecific = asset.institution && asset.institution !== '未命名渠道';
+        if (isExistingGeneric && isNewSpecific) existing.institution = asset.institution;
+        
+        // Preserve earnings currency if set on either
+        if (!existing.earningsCurrency && asset.earningsCurrency) {
+            existing.earningsCurrency = asset.earningsCurrency;
+        }
+
+        uniqueMap.set(key, existing);
+     } else {
+        uniqueMap.set(key, asset);
+     }
+  });
+  return Array.from(uniqueMap.values()).map(recalculateAsset);
 };
 
 export default function App() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false); 
-  const [showDirectScanModal, setShowDirectScanModal] = useState(false); // New modal for direct scan
+  const [showDirectScanModal, setShowDirectScanModal] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [isProcessingAI, setIsProcessingAI] = useState(false);
   
-  // Currency State
   const [dashboardCurrency, setDashboardCurrency] = useState<Currency>('CNY');
-  
-  // AI Scan State
-  const [targetAssetId, setTargetAssetId] = useState<string>('auto'); // 'auto' for smart match
-  const [manualInstitution, setManualInstitution] = useState(''); // Manual override for institution
-  const [manualCurrency, setManualCurrency] = useState<Currency | ''>(''); // Manual override for currency
+  const [targetAssetId, setTargetAssetId] = useState<string>('auto');
+  const [manualInstitution, setManualInstitution] = useState('');
+  const [manualCurrency, setManualCurrency] = useState<Currency | ''>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Edit Transaction State
   const [editingTransaction, setEditingTransaction] = useState<{ assetId: string, transaction: Transaction } | null>(null);
-
-  // Edit Asset Info State
   const [editingAssetInfo, setEditingAssetInfo] = useState<Asset | null>(null);
-
-  // Delete Asset State
   const [confirmDeleteAssetId, setConfirmDeleteAssetId] = useState<string | null>(null);
 
-  // New Asset Form State
   const [newAsset, setNewAsset] = useState<{
     institution: string;
     productName: string;
     type: AssetType;
     currency: Currency;
     amount: string;
-    date: string; // YYYY-MM-DD
+    date: string;
     yield: string;
     remark: string;
   }>({
@@ -474,47 +810,38 @@ export default function App() {
     remark: ''
   });
 
-  // Load data on mount and consolidate
   useEffect(() => {
-    const loaded = storage.getAssets();
-    // Normalize currencies
+    const loaded = getAssets();
     const normalized = loaded.map(a => ({ ...a, currency: a.currency || 'CNY' }));
-    
-    // Automatically consolidate duplicates (same name + currency)
-    const consolidated = consolidateAssets(normalized);
-    
-    setAssets(consolidated);
+    setAssets(consolidateAssets(normalized));
   }, []);
 
-  // Save data on change
   useEffect(() => {
-    storage.saveAssets(assets);
+    saveAssets(assets);
   }, [assets]);
 
-  // Currency Conversion Helper
   const convertToDashboard = (amount: number, fromCurrency: Currency) => {
     const amountInCNY = amount * RATES[fromCurrency];
     return amountInCNY / RATES[dashboardCurrency];
   };
 
   const totalAssets = assets.reduce((sum, a) => sum + convertToDashboard(a.currentAmount, a.currency), 0);
-  const totalEarnings = assets.reduce((sum, a) => sum + convertToDashboard(a.totalEarnings, a.currency), 0);
+  const totalEarnings = assets.reduce((sum, a) => sum + convertToDashboard(a.totalEarnings, a.earningsCurrency || a.currency), 0);
 
-  // Group assets for charts
   const chartData = [
     { name: '基金', value: assets.filter(a => a.type === AssetType.FUND).reduce((s, a) => s + convertToDashboard(a.currentAmount, a.currency), 0) },
     { name: '黄金', value: assets.filter(a => a.type === AssetType.GOLD).reduce((s, a) => s + convertToDashboard(a.currentAmount, a.currency), 0) },
     { name: '其他', value: assets.filter(a => a.type === AssetType.OTHER).reduce((s, a) => s + convertToDashboard(a.currentAmount, a.currency), 0) },
   ].filter(d => d.value > 0);
 
-  // Group assets by Institution for the list view
-  const assetsByInstitution = assets.reduce((groups, asset) => {
-    const key = asset.institution;
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(asset);
-    return groups;
-  }, {} as Record<string, Asset[]>);
-
+  const assetsByInstitution = useMemo(() => {
+    return assets.reduce((groups, asset) => {
+      const key = asset.institution || '其他';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(asset);
+      return groups;
+    }, {} as Record<string, Asset[]>);
+  }, [assets]);
 
   const handleAddAsset = () => {
     if (!newAsset.institution || !newAsset.productName || !newAsset.amount) return;
@@ -533,6 +860,7 @@ export default function App() {
       date: newAsset.date || new Date().toISOString().split('T')[0],
       type: 'deposit',
       amount: amountNum,
+      currency: newAsset.currency,
       description: newAsset.remark || '手动记录'
     };
 
@@ -561,38 +889,22 @@ export default function App() {
       updatedAssets.push(recalculateAsset(asset));
     }
     
-    // Consolidate one more time just in case of weird state (though above logic is sound)
     setAssets(consolidateAssets(updatedAssets));
-    
     setShowAddModal(false);
     setNewAsset({ 
-      institution: '', 
-      productName: '', 
-      type: AssetType.FUND, 
-      currency: 'CNY',
-      amount: '', 
-      date: new Date().toISOString().split('T')[0],
-      yield: '', 
-      remark: '' 
+      institution: '', productName: '', type: AssetType.FUND, currency: 'CNY',
+      amount: '', date: new Date().toISOString().split('T')[0], yield: '', remark: '' 
     });
   };
 
   const handleUpdateTransaction = (updatedTx: Transaction) => {
     if (!editingTransaction) return;
-
     const assetIndex = assets.findIndex(a => a.id === editingTransaction.assetId);
     if (assetIndex === -1) return;
-
     const updatedAssets = [...assets];
     const asset = updatedAssets[assetIndex];
-    
     const newHistory = asset.history.map(t => t.id === updatedTx.id ? updatedTx : t);
-    
-    updatedAssets[assetIndex] = recalculateAsset({
-      ...asset,
-      history: newHistory
-    });
-
+    updatedAssets[assetIndex] = recalculateAsset({ ...asset, history: newHistory });
     setAssets(updatedAssets);
     setEditingTransaction(null);
   };
@@ -600,28 +912,17 @@ export default function App() {
   const handleDeleteTransaction = (txId: string) => {
     if (!editingTransaction) return;
     if (!confirm('确定要删除这条记录吗？')) return;
-
     const assetIndex = assets.findIndex(a => a.id === editingTransaction.assetId);
     if (assetIndex === -1) return;
-
     const updatedAssets = [...assets];
     const asset = updatedAssets[assetIndex];
-    
     const newHistory = asset.history.filter(t => t.id !== txId);
-    
-    updatedAssets[assetIndex] = recalculateAsset({
-      ...asset,
-      history: newHistory
-    });
-
+    updatedAssets[assetIndex] = recalculateAsset({ ...asset, history: newHistory });
     setAssets(updatedAssets);
     setEditingTransaction(null);
   };
 
-  const handleDeleteAssetRequest = (assetId: string) => {
-    console.log("Requesting delete for asset:", assetId);
-    setConfirmDeleteAssetId(assetId);
-  };
+  const handleDeleteAssetRequest = (assetId: string) => setConfirmDeleteAssetId(assetId);
 
   const executeDeleteAsset = () => {
     if (confirmDeleteAssetId) {
@@ -635,48 +936,24 @@ export default function App() {
     setEditingAssetInfo(null);
   };
 
-  const handleOpenAIModal = () => {
-    setTargetAssetId('auto');
-    setManualInstitution('');
-    setManualCurrency('');
-    setShowAIModal(true);
-  };
-
-  const handleDirectScan = (assetId: string) => {
-    const asset = assets.find(a => a.id === assetId);
-    setTargetAssetId(assetId);
-    setManualInstitution('');
-    // Pre-select currency based on asset default
-    setManualCurrency(asset?.currency || 'CNY');
-    setShowDirectScanModal(true);
-  };
-
-  const triggerFileSelect = () => {
-    fileInputRef.current?.click();
-  };
-
   const handleAIUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-
     setIsProcessingAI(true);
     
     const fileArray = Array.from(files);
-    let allNewRecords: gemini.AIAssetRecord[] = [];
+    let allNewRecords: AIAssetRecord[] = [];
 
     try {
-        const processFile = (file: File): Promise<gemini.AIAssetRecord[]> => {
+        const processFile = (file: File): Promise<AIAssetRecord[]> => {
             return new Promise((resolve) => {
                 const reader = new FileReader();
                 reader.onloadend = async () => {
                     const base64 = reader.result as string;
                     try {
-                        const records = await gemini.analyzeEarningsScreenshot(base64);
+                        const records = await analyzeEarningsScreenshot(base64);
                         resolve(records || []);
                     } catch (err: any) {
-                         if (err.message === "GEMINI_REGION_ERROR") {
-                             alert("AI 服务连接失败：当前网络环境不支持 (403 Region not supported)。\\n请尝试切换 VPN 节点至支持地区 (如美国/新加坡)。");
-                        }
                         console.error("Error analyzing file", file.name, err);
                         resolve([]);
                     }
@@ -685,60 +962,30 @@ export default function App() {
             });
         };
 
-        // 1. Process all files sequentially to gather raw data
         for (const file of fileArray) {
             const records = await processFile(file);
             allNewRecords.push(...records);
         }
 
         if (allNewRecords.length > 0) {
-             
-             // 1.5 Apply Manual Currency Override if set
+             // If manual currency was explicitly set, override for NEW records.
+             // But we will be smarter about applying it to assets later.
              if (manualCurrency) {
-                 allNewRecords.forEach(r => {
-                     r.currency = manualCurrency as Currency;
-                 });
+                 allNewRecords.forEach(r => r.currency = manualCurrency as Currency);
              }
 
-             // 2. [Context Inference] Improve Names based on siblings in the same batch
-             // Find "Strong" records (those with explicit product names, usually from purchase/deposit screenshots)
-             const strongRecords = allNewRecords.filter(r => r.productName && r.productName !== '未命名产品' && r.productName.length > 3);
-             
-             // Map Currency -> Primary Product Name
-             const batchContext = new Map<Currency, string>();
-             strongRecords.forEach(r => {
-                 if (r.currency && r.productName) {
-                     // If we have multiple strong names for the same currency in one batch, this logic prefers the last one 
-                     // (or we could count frequency, but usually users upload 1 product's flow at a time).
-                     batchContext.set(r.currency as Currency, r.productName);
-                 }
-             });
-
-             // Apply inferred names to "Weak" records (earnings lists usually missing headers)
-             allNewRecords.forEach(record => {
-                 const currency = (record.currency as Currency) || 'CNY';
-                 const isWeakName = !record.productName || record.productName === '未命名产品' || record.productName.length <= 3;
-                 
-                 if (isWeakName && batchContext.has(currency)) {
-                     const inferredName = batchContext.get(currency)!;
-                     console.log(\`Context Inference: Associating unnamed \${currency} record to '\${inferredName}'\`);
-                     record.productName = inferredName;
-                 }
-             });
-
-             // 3. Grouping Logic
              const groupedRecords = new Map<string, {
                  productName: string;
                  currency: Currency;
                  assetType: AssetType;
                  institution: string | null;
-                 records: gemini.AIAssetRecord[];
+                 records: AIAssetRecord[];
              }>();
 
              allNewRecords.forEach(record => {
                  if (!record.productName) record.productName = "未命名产品";
                  const currency = (record.currency as Currency) || 'CNY';
-                 const key = \`\${record.productName}|\${currency}\`;
+                 const key = `${record.productName}|${currency}`;
 
                  if (!groupedRecords.has(key)) {
                      groupedRecords.set(key, {
@@ -749,12 +996,8 @@ export default function App() {
                          records: []
                      });
                  }
-                 
                  const group = groupedRecords.get(key)!;
-                 // Consolidate Institution info: if any record in the group has it, apply to group
-                 if (!group.institution && record.institution) {
-                     group.institution = record.institution;
-                 }
+                 if (!group.institution && record.institution) group.institution = record.institution;
                  group.records.push(record);
              });
 
@@ -771,110 +1014,103 @@ export default function App() {
                  let assetIndex = -1;
                  
                  if (targetAssetId !== 'auto') {
-                     // If manual target, force all groups into this asset
+                     // Direct Scan Mode
                      assetIndex = updatedAssets.findIndex(a => a.id === targetAssetId);
+                     
+                     // Logic Update:
+                     // If we are updating an existing asset, and the user provided a manual currency:
+                     // 1. If we are adding 'deposit', it might imply the whole asset currency is wrong, or just this deposit.
+                     // 2. If we are adding 'earning', it implies the earnings currency might be different.
+                     
+                     if (assetIndex >= 0 && manualCurrency) {
+                        const asset = updatedAssets[assetIndex];
+                        // If we are adding earnings, and the manual currency differs from asset principal currency,
+                        // update the earningsCurrency field.
+                        if (group.records.some(r => r.type === 'earning') && manualCurrency !== asset.currency) {
+                             console.log(`Updating earnings currency for ${asset.productName} to ${manualCurrency}`);
+                             asset.earningsCurrency = manualCurrency as Currency;
+                        }
+                     }
                  } else {
-                     // 1. Strict Match: Institution + Name + Currency
+                     // Auto Mode
                      assetIndex = updatedAssets.findIndex(a => 
                          a.institution === institution && 
-                         a.productName === productName &&
+                         a.productName === productName && 
                          a.currency === currency
                      );
-
-                     // 2. Fuzzy/Smart Match: Name + Currency only
-                     if (assetIndex === -1) {
-                         const potentialMatches = updatedAssets.map((a, idx) => ({ ...a, originalIndex: idx }))
-                             .filter(a => a.productName === productName && a.currency === currency);
-                         
-                         if (potentialMatches.length === 1) {
-                             // Found exactly one candidate -> Merge into it
-                             assetIndex = potentialMatches[0].originalIndex;
-                             console.log(\`Smart Merge: Merging records for '\${productName}' into existing asset '\${updatedAssets[assetIndex].institution} - \${productName}'\`);
-                         }
-                     }
                  }
-
-                 // Helper to check duplicates
-                 const isDuplicate = (history: Transaction[], r: gemini.AIAssetRecord) => {
-                     const type = r.type || 'earning';
-                     return history.some(h => 
-                        h.date === r.date && 
-                        h.type === type && 
-                        Math.abs(h.amount - r.amount) < 0.01
-                     );
-                 };
 
                  const newTransactions: Transaction[] = [];
-
                  group.records.forEach(r => {
                      if (!r.date || typeof r.amount !== 'number') return;
-                     
-                     // Check against existing asset history if it exists
-                     if (assetIndex >= 0) {
-                         const existingAsset = updatedAssets[assetIndex];
-                         if (isDuplicate(existingAsset.history, r)) return;
-                     } 
-                     // Check against newly created transactions for this batch
                      const type = r.type || 'earning';
-                     if (newTransactions.some(t => t.date === r.date && t.type === type && Math.abs(t.amount - r.amount) < 0.01)) return;
-
-                     newTransactions.push({
-                         id: Date.now().toString() + Math.random().toString().slice(2, 6),
-                         date: r.date,
-                         type: type,
-                         amount: r.amount,
-                         description: type === 'deposit' ? 'AI 识别买入' : 'AI 识别收益'
-                     });
+                     
+                     // De-dupe
+                     const exists = assetIndex >= 0 
+                        ? updatedAssets[assetIndex].history.some(h => h.date === r.date && h.type === type && Math.abs(h.amount - r.amount) < 0.01)
+                        : false;
+                     
+                     if (!exists && !newTransactions.some(t => t.date === r.date && t.type === type && Math.abs(t.amount - r.amount) < 0.01)) {
+                         newTransactions.push({
+                             id: Date.now().toString() + Math.random().toString().slice(2, 6),
+                             date: r.date,
+                             type: type,
+                             amount: r.amount,
+                             currency: r.currency as Currency, // Store specific currency
+                             description: type === 'deposit' ? 'AI 识别买入' : 'AI 识别收益'
+                         });
+                     }
                  });
 
-                 if (newTransactions.length === 0) return;
+                 if (newTransactions.length > 0) {
+                     if (assetIndex >= 0) {
+                         const asset = updatedAssets[assetIndex];
+                         
+                         // Auto-detect Mixed Currency for Auto Mode too
+                         // If we are adding mixed currency earnings, update earningsCurrency
+                         newTransactions.forEach(tx => {
+                             if (tx.type === 'earning' && tx.currency && tx.currency !== asset.currency) {
+                                 asset.earningsCurrency = tx.currency;
+                             }
+                         });
 
-                 if (assetIndex >= 0) {
-                     // Update
-                     const asset = updatedAssets[assetIndex];
-                     asset.history = [...newTransactions, ...asset.history];
-                     updatedAssets[assetIndex] = recalculateAsset(asset);
-                     updatedCount++;
-                 } else {
-                     // Create
-                     const newAsset: Asset = {
-                         id: Date.now().toString() + Math.random().toString().slice(2, 6),
-                         institution: institution,
-                         productName: productName,
-                         type: group.assetType,
-                         currency: currency,
-                         currentAmount: 0,
-                         totalEarnings: 0,
-                         sevenDayYield: 0,
-                         remark: 'AI 自动创建',
-                         history: newTransactions,
-                         dailyEarnings: {}
-                     };
-                     updatedAssets.push(recalculateAsset(newAsset));
-                     createdCount++;
+                         asset.history = [...newTransactions, ...asset.history];
+                         updatedAssets[assetIndex] = recalculateAsset(asset);
+                         updatedCount++;
+                     } else {
+                         const newAsset: Asset = {
+                             id: Date.now().toString() + Math.random().toString().slice(2, 6),
+                             institution: institution,
+                             productName: productName,
+                             type: group.assetType,
+                             currency: currency,
+                             earningsCurrency: currency, // Default to same
+                             currentAmount: 0,
+                             totalEarnings: 0,
+                             sevenDayYield: 0,
+                             remark: 'AI 自动创建',
+                             history: newTransactions,
+                             dailyEarnings: {}
+                         };
+                         updatedAssets.push(recalculateAsset(newAsset));
+                         createdCount++;
+                     }
+                     totalRecordsProcessed += newTransactions.length;
                  }
-                 totalRecordsProcessed += newTransactions.length;
              });
 
-            // Perform final consolidation to ensure cleanliness
             setAssets(consolidateAssets(updatedAssets));
             setShowAIModal(false);
+            setShowDirectScanModal(false);
             
             if (totalRecordsProcessed > 0) {
-                let msg = \`处理完成！\\n新增记录: \${totalRecordsProcessed} 条\`;
-                if (createdCount > 0) msg += \`\\n新建资产: \${createdCount} 个\`;
-                if (updatedCount > 0) msg += \`\\n更新资产: \${updatedCount} 个\`;
-                alert(msg);
+                alert(`处理完成！\n新增记录: ${totalRecordsProcessed} 条`);
             } else {
-                alert(\`所有识别到的记录均已存在。\`);
+                alert(`所有识别到的记录均已存在。`);
             }
         } else {
-             // Only show this generic alert if no records found AND no errors alerted
-             if (!allNewRecords || allNewRecords.length === 0) {
-                 alert("未能识别图片中的有效信息，请确保截图清晰，或检查 API Key 是否配置正确。");
-             }
+             alert("未能识别图片中的有效信息，请确保截图清晰。");
         }
-
     } catch (error) {
         console.error("AI Batch Process Error:", error);
         alert("处理过程中发生错误，请重试。");
@@ -884,29 +1120,29 @@ export default function App() {
     }
   };
 
-  const toggleDashboardCurrency = () => {
-    const next: Record<Currency, Currency> = {
-      'CNY': 'USD',
-      'USD': 'HKD',
-      'HKD': 'CNY'
-    };
-    setDashboardCurrency(next[dashboardCurrency]);
-  };
+  // Styles injection
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+      @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+      .animate-fadeIn { animation: fadeIn 0.2s ease-out; }
+      .animate-slideUp { animation: slideUp 0.3s ease-out; }
+      .animate-scaleIn { animation: scaleIn 0.2s ease-out; }
+      .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+      .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+      .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #e5e7eb; border-radius: 20px; }
+    `;
+    document.head.appendChild(style);
+    return () => { document.head.removeChild(style); };
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#f5f6f7] text-gray-800 pb-32">
-      
-      {/* Hidden File Input for AI Scan */}
-      <input 
-        type="file" 
-        multiple
-        accept="image/*" 
-        ref={fileInputRef}
-        onChange={handleAIUpload}
-        className="hidden" 
-      />
+      <input type="file" multiple accept="image/*" ref={fileInputRef} onChange={handleAIUpload} className="hidden" />
 
-      {/* Top Header */}
+      {/* Header */}
       <div className="px-6 pt-8 pb-4 flex justify-between items-center bg-white sticky top-0 z-30 shadow-sm sm:hidden">
          <h1 className="text-lg font-bold">我的资产</h1>
          <button onClick={() => setShowGuide(true)}><HelpCircle size={20} className="text-gray-400" /></button>
@@ -916,10 +1152,9 @@ export default function App() {
          <button onClick={() => setShowGuide(true)}><HelpCircle size={24} className="text-gray-400" /></button>
       </div>
 
-      {/* Fintech Dashboard Card */}
+      {/* Dashboard Card */}
       <div className="mx-4 sm:mx-6 mb-6">
         <div className="bg-gradient-to-br from-gray-800 to-black text-white rounded-2xl p-6 shadow-xl relative overflow-hidden transition-all duration-500">
-           
            <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/5 rounded-full blur-2xl"></div>
            <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/10 rounded-full blur-xl"></div>
 
@@ -928,7 +1163,7 @@ export default function App() {
                  <div className="flex items-center gap-2 mb-1">
                    <p className="text-gray-400 text-xs font-medium tracking-wide">总资产估值</p>
                    <button 
-                     onClick={toggleDashboardCurrency}
+                     onClick={() => setDashboardCurrency(curr => curr === 'CNY' ? 'USD' : curr === 'USD' ? 'HKD' : 'CNY')}
                      className="text-[10px] font-bold bg-white/10 px-1.5 py-0.5 rounded text-gray-300 hover:bg-white/20 transition flex items-center gap-0.5"
                    >
                      {dashboardCurrency} <RefreshCw size={8} />
@@ -957,23 +1192,13 @@ export default function App() {
                 <div className="w-24 h-24 sm:w-32 sm:h-32 relative">
                    <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                         <Pie
-                            data={chartData}
-                            innerRadius="60%"
-                            outerRadius="100%"
-                            paddingAngle={5}
-                            dataKey="value"
-                            stroke="none"
-                         >
+                         <Pie data={chartData} innerRadius="60%" outerRadius="100%" paddingAngle={5} dataKey="value" stroke="none">
                             {chartData.map((entry, index) => (
-                               <Cell key={\`cell-\${index}\`} fill={COLORS[index % COLORS.length]} />
+                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                          </Pie>
                       </PieChart>
                    </ResponsiveContainer>
-                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <span className="text-[10px] text-gray-400">分布</span>
-                   </div>
                 </div>
               )}
            </div>
@@ -990,7 +1215,7 @@ export default function App() {
              <p className="text-gray-400 text-sm">暂无资产，点击下方按钮开始记录</p>
            </div>
          ) : (
-           Object.entries(assetsByInstitution).map(([institution, instAssets]: [string, Asset[]]) => (
+           Object.entries(assetsByInstitution).map(([institution, instAssets]) => (
              <div key={institution} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="bg-gray-50/50 px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                    <div className="flex items-center gap-2">
@@ -998,7 +1223,6 @@ export default function App() {
                       <h3 className="font-bold text-gray-700 text-sm">{institution}</h3>
                    </div>
                 </div>
-
                 <div className="divide-y divide-gray-50">
                   {instAssets.map(asset => (
                     <AssetItem 
@@ -1007,7 +1231,12 @@ export default function App() {
                       onEditTransaction={(tx) => setEditingTransaction({ assetId: asset.id, transaction: tx })}
                       onDelete={handleDeleteAssetRequest}
                       onEditInfo={() => setEditingAssetInfo(asset)}
-                      onDirectAIScan={() => handleDirectScan(asset.id)}
+                      onDirectAIScan={() => {
+                        setTargetAssetId(asset.id);
+                        // Default manualCurrency to earningsCurrency, but allow change
+                        setManualCurrency(asset.earningsCurrency || asset.currency);
+                        setShowDirectScanModal(true);
+                      }}
                     />
                   ))}
                 </div>
@@ -1016,176 +1245,106 @@ export default function App() {
          )}
       </div>
 
-      {/* Floating Action Capsule */}
+      {/* Action Bar */}
       <div className="fixed bottom-8 left-0 right-0 flex justify-center z-40 pointer-events-none">
-         <div className="pointer-events-auto bg-gray-900 text-white rounded-full shadow-2xl shadow-gray-400/50 flex items-center p-1.5 px-6 gap-0 backdrop-blur-xl bg-opacity-95 transform hover:scale-105 transition duration-200">
-            <button 
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 font-bold text-sm sm:text-base active:opacity-70 transition py-2 px-4"
-            >
-              <Plus size={18} className="text-blue-400" />
-              <span>记一笔</span>
+         <div className="pointer-events-auto bg-gray-900 text-white rounded-full shadow-2xl flex items-center p-1.5 px-6 gap-0 backdrop-blur-xl bg-opacity-95 hover:scale-105 transition duration-200">
+            <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70">
+              <Plus size={18} className="text-blue-400" /> <span>记一笔</span>
             </button>
             <div className="w-px h-5 bg-gray-700 mx-1"></div>
             <button 
-              onClick={handleOpenAIModal}
-              className="flex items-center gap-2 font-bold text-sm sm:text-base active:opacity-70 transition py-2 px-4"
+              onClick={() => {
+                setTargetAssetId('auto');
+                setManualInstitution('');
+                setManualCurrency('');
+                setShowAIModal(true);
+              }}
+              className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70"
             >
-              <Camera size={18} className="text-blue-400" />
-              <span>AI 识别</span>
+              <Camera size={18} className="text-blue-400" /> <span>AI 识别</span>
             </button>
          </div>
       </div>
 
-      {/* Direct AI Scan Modal */}
-      {showDirectScanModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn p-4">
-           <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl">
-              <div className="flex justify-between items-center mb-6">
-                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                   <Sparkles size={20} className="text-purple-500" />
-                   AI 录入明细
-                 </h2>
-                 <button onClick={() => setShowDirectScanModal(false)} className="p-1 hover:bg-gray-100 rounded-full">
-                    <X size={20} className="text-gray-400" />
-                 </button>
-              </div>
-              
-              <div className="space-y-6">
-                 <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                     <p className="text-xs text-gray-400 mb-1">目标资产</p>
-                     <p className="font-bold text-gray-800 text-sm">
-                        {assets.find(a => a.id === targetAssetId)?.productName || '未知资产'}
-                     </p>
-                 </div>
-
-                 <div>
-                    <label className="block text-gray-500 text-xs font-bold mb-2">确认货币种类</label>
-                    <div className="relative">
-                       <select 
-                          value={manualCurrency}
-                          onChange={(e) => setManualCurrency(e.target.value as Currency)}
-                          className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-3 pr-10 text-sm font-bold text-gray-800 appearance-none focus:ring-2 focus:ring-purple-500 outline-none"
-                       >
-                          <option value="CNY">CNY (人民币)</option>
-                          <option value="USD">USD (美元)</option>
-                          <option value="HKD">HKD (港币)</option>
-                       </select>
-                       <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                    </div>
-                 </div>
-
-                 <button 
-                    onClick={() => {
-                        setShowDirectScanModal(false);
-                        triggerFileSelect();
-                    }}
-                    disabled={isProcessingAI}
-                    className="w-full py-3.5 bg-gray-900 text-white font-bold rounded-xl shadow-lg active:scale-95 transition flex justify-center items-center gap-2"
-                 >
-                    <Scan size={18} />
-                    <span>上传截图</span>
-                 </button>
-              </div>
-           </div>
-        </div>
-      )}
-
-      {/* AI Scan Modal */}
+      {/* Modals */}
       {showAIModal && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn p-4">
            <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl">
               <div className="flex justify-between items-center mb-6">
                  <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                   <Camera size={20} className="text-blue-500" />
-                   AI 智能识别
+                   <Camera size={20} className="text-blue-500" /> AI 智能识别
                  </h2>
-                 <button onClick={() => setShowAIModal(false)} className="p-1 hover:bg-gray-100 rounded-full">
+                 <button 
+                    onClick={() => setShowAIModal(false)} 
+                    disabled={isProcessingAI}
+                    className="p-1 hover:bg-gray-100 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
+                 >
                     <X size={20} className="text-gray-400" />
                  </button>
               </div>
-
               <div className="space-y-6">
-                 
-                 {/* Target Select */}
                  <div>
                     <label className="block text-gray-500 text-xs font-bold mb-2">识别模式</label>
                     <div className="relative">
                        <select 
                           value={targetAssetId}
                           onChange={(e) => setTargetAssetId(e.target.value)}
-                          className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-3 pr-10 text-sm font-bold text-gray-800 appearance-none focus:ring-2 focus:ring-blue-500 outline-none"
+                          disabled={isProcessingAI}
+                          className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-3 pr-10 text-sm font-bold text-gray-800 appearance-none focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-400"
                        >
                           <option value="auto">✨ 自动匹配 / 新建资产</option>
                           <option disabled>──────────</option>
                           {assets.map(asset => (
-                             <option key={asset.id} value={asset.id}>
-                                更新: {asset.institution} - {asset.productName}
-                             </option>
+                             <option key={asset.id} value={asset.id}>更新: {asset.institution} - {asset.productName}</option>
                           ))}
                        </select>
                        <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                     </div>
                  </div>
-
-                 {/* Manual Institution Override */}
                  {targetAssetId === 'auto' && (
                      <>
                         <div>
-                           <label className="block text-gray-500 text-xs font-bold mb-2">投资渠道 (可选, 留空则自动识别)</label>
+                           <label className="block text-gray-500 text-xs font-bold mb-2">投资渠道 (可选)</label>
                            <input 
-                              type="text"
-                              value={manualInstitution}
-                              onChange={(e) => setManualInstitution(e.target.value)}
-                              placeholder="例如：支付宝、招商银行"
-                              className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500"
+                              type="text" value={manualInstitution} onChange={(e) => setManualInstitution(e.target.value)}
+                              disabled={isProcessingAI}
+                              placeholder="例如：支付宝" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm font-bold disabled:bg-gray-100 disabled:text-gray-400"
                            />
                         </div>
-
-                        {/* Manual Currency Override */}
                         <div>
-                           <label className="block text-gray-500 text-xs font-bold mb-2">货币种类 (可选, 留空则自动识别)</label>
+                           <label className="block text-gray-500 text-xs font-bold mb-2">货币种类 (可选)</label>
                            <div className="relative">
                               <select 
-                                 value={manualCurrency}
-                                 onChange={(e) => setManualCurrency(e.target.value as Currency | '')}
-                                 className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-3 pr-10 text-sm font-bold text-gray-800 appearance-none focus:ring-2 focus:ring-blue-500 outline-none"
+                                 value={manualCurrency} onChange={(e) => setManualCurrency(e.target.value as Currency | '')}
+                                 disabled={isProcessingAI}
+                                 className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-3 pr-10 text-sm font-bold appearance-none disabled:bg-gray-100 disabled:text-gray-400"
                               >
                                  <option value="">✨ 自动识别</option>
-                                 <option value="CNY">CNY (人民币)</option>
-                                 <option value="USD">USD (美元)</option>
-                                 <option value="HKD">HKD (港币)</option>
+                                 <option value="CNY">CNY</option>
+                                 <option value="USD">USD</option>
+                                 <option value="HKD">HKD</option>
                               </select>
                               <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                            </div>
                         </div>
                      </>
                  )}
-
-                 <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-blue-800 text-xs leading-relaxed">
-                    <p>📸 <strong>功能升级</strong></p>
-                    <ul className="list-disc pl-4 mt-1 space-y-1 text-blue-600/80">
-                       <li>支持自动识别产品名称、日期、金额、类型</li>
-                       <li>支持识别港币(HKD)、美元(USD)等外币</li>
-                       <li>自动创建新资产，或匹配已有资产</li>
-                    </ul>
-                 </div>
-
                  <button 
-                    onClick={triggerFileSelect}
+                    onClick={() => fileInputRef.current?.click()}
                     disabled={isProcessingAI}
-                    className="w-full py-3.5 bg-gray-900 text-white font-bold rounded-xl shadow-lg active:scale-95 transition flex justify-center items-center gap-2"
+                    className={`w-full py-3.5 rounded-xl shadow-lg transition flex justify-center items-center gap-2 font-bold text-white
+                        ${isProcessingAI ? 'bg-gray-700 cursor-not-allowed' : 'bg-gray-900 active:scale-95'}`}
                  >
                     {isProcessingAI ? (
-                       <>
-                         <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
-                         <span>智能分析中...</span>
-                       </>
+                        <>
+                            <Loader2 className="animate-spin" size={18} />
+                            <span>AI 正在分析中...</span>
+                        </>
                     ) : (
-                       <>
-                         <Scan size={18} />
-                         <span>上传截图</span>
-                       </>
+                        <>
+                            <Scan size={18} /> 
+                            <span>上传截图</span>
+                        </>
                     )}
                  </button>
               </div>
@@ -1193,55 +1352,96 @@ export default function App() {
         </div>
       )}
 
-      {/* Edit Asset Info Modal */}
-      {editingAssetInfo && (
-        <EditAssetInfoModal 
-          asset={editingAssetInfo}
-          onSave={handleSaveAssetInfo}
-          onClose={() => setEditingAssetInfo(null)}
-        />
+      {showDirectScanModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn p-4">
+           <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl">
+              <div className="flex justify-between items-center mb-6">
+                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                   <Sparkles size={20} className="text-purple-500" /> AI 录入明细
+                 </h2>
+                 <button 
+                    onClick={() => setShowDirectScanModal(false)} 
+                    disabled={isProcessingAI}
+                    className="p-1 hover:bg-gray-100 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
+                 >
+                    <X size={20} className="text-gray-400" />
+                 </button>
+              </div>
+              <div className="space-y-6">
+                 <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                     <p className="text-xs text-gray-400 mb-1">目标资产</p>
+                     <p className="font-bold text-gray-800 text-sm">{assets.find(a => a.id === targetAssetId)?.productName || '未知资产'}</p>
+                 </div>
+                 <div>
+                    <label className="block text-gray-500 text-xs font-bold mb-2">确认货币种类</label>
+                    <div className="relative">
+                       <select 
+                          value={manualCurrency} onChange={(e) => setManualCurrency(e.target.value as Currency)}
+                          disabled={isProcessingAI}
+                          className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-3 pr-10 text-sm font-bold appearance-none disabled:bg-gray-100 disabled:text-gray-400"
+                       >
+                          <option value="CNY">CNY</option>
+                          <option value="USD">USD</option>
+                          <option value="HKD">HKD</option>
+                       </select>
+                       <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    </div>
+                 </div>
+                 <button 
+                    onClick={() => {
+                        // Don't close modal here, let handleAIUpload handle it on success
+                        fileInputRef.current?.click(); 
+                    }}
+                    disabled={isProcessingAI}
+                    className={`w-full py-3.5 rounded-xl shadow-lg transition flex justify-center items-center gap-2 font-bold text-white
+                        ${isProcessingAI ? 'bg-gray-700 cursor-not-allowed' : 'bg-gray-900 active:scale-95'}`}
+                 >
+                    {isProcessingAI ? (
+                        <>
+                            <Loader2 className="animate-spin" size={18} />
+                            <span>正在分析截图...</span>
+                        </>
+                    ) : (
+                        <>
+                            <Scan size={18} /> 
+                            <span>上传截图</span>
+                        </>
+                    )}
+                 </button>
+              </div>
+           </div>
+        </div>
       )}
 
       {/* Add Asset Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-slideUp">
-            <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 sm:hidden"></div>
             <h2 className="text-xl font-bold mb-6 text-gray-800 text-center">记录新资产</h2>
-            
             <div className="space-y-4">
               <SmartInput 
-                label="投资渠道"
-                placeholder="例如：支付宝"
-                value={newAsset.institution}
+                label="投资渠道" placeholder="例如：支付宝" value={newAsset.institution}
                 onChange={(v) => setNewAsset({...newAsset, institution: v})}
                 suggestions={['支付宝', '微信理财通', '招商银行', '工商银行']}
               />
-              
               <SmartInput 
-                label="产品名称"
-                placeholder="例如：易方达蓝筹"
-                value={newAsset.productName}
+                label="产品名称" placeholder="例如：易方达蓝筹" value={newAsset.productName}
                 onChange={(v) => setNewAsset({...newAsset, productName: v})}
-                suggestions={storage.getUniqueProductNames(assets)}
+                suggestions={getUniqueProductNames(assets)}
               />
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-gray-500 text-xs font-bold mb-1.5">记录日期</label>
                   <input 
-                    type="date"
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                    value={newAsset.date}
-                    onChange={(e) => setNewAsset({...newAsset, date: e.target.value})}
+                    type="date" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm"
+                    value={newAsset.date} onChange={(e) => setNewAsset({...newAsset, date: e.target.value})}
                   />
                 </div>
                 <div>
                   <label className="block text-gray-500 text-xs font-bold mb-1.5">资产类型</label>
                   <select 
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
-                    value={newAsset.type}
-                    onChange={(e) => setNewAsset({...newAsset, type: e.target.value as AssetType})}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm appearance-none"
+                    value={newAsset.type} onChange={(e) => setNewAsset({...newAsset, type: e.target.value as AssetType})}
                   >
                     <option value={AssetType.FUND}>基金</option>
                     <option value={AssetType.GOLD}>黄金</option>
@@ -1249,135 +1449,85 @@ export default function App() {
                   </select>
                 </div>
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                  <div>
                    <label className="block text-gray-500 text-xs font-bold mb-1.5">货币种类</label>
                    <select 
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none font-bold text-gray-700"
-                      value={newAsset.currency}
-                      onChange={(e) => setNewAsset({...newAsset, currency: e.target.value as Currency})}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm appearance-none font-bold"
+                      value={newAsset.currency} onChange={(e) => setNewAsset({...newAsset, currency: e.target.value as Currency})}
                     >
-                      <option value="CNY">CNY (人民币)</option>
-                      <option value="USD">USD (美元)</option>
-                      <option value="HKD">HKD (港币)</option>
+                      <option value="CNY">CNY</option>
+                      <option value="USD">USD</option>
+                      <option value="HKD">HKD</option>
                     </select>
                  </div>
                  <div>
                      <label className="block text-gray-500 text-xs font-bold mb-1.5">金额</label>
-                     <div className="relative">
-                       <input 
-                        type="number"
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-lg font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none"
-                        placeholder="0.00"
-                        value={newAsset.amount}
-                        onChange={(e) => setNewAsset({...newAsset, amount: e.target.value})}
-                       />
-                     </div>
+                     <input 
+                      type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-lg font-bold"
+                      placeholder="0.00" value={newAsset.amount} onChange={(e) => setNewAsset({...newAsset, amount: e.target.value})}
+                     />
                   </div>
               </div>
-
               <div className="flex gap-4">
                   <div className="flex-1">
                      <label className="block text-gray-500 text-xs font-bold mb-1.5">年化 (%)</label>
                      <input 
-                      type="number"
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm"
-                      placeholder="2.5"
-                      value={newAsset.yield}
-                      onChange={(e) => setNewAsset({...newAsset, yield: e.target.value})}
+                      type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm"
+                      placeholder="2.5" value={newAsset.yield} onChange={(e) => setNewAsset({...newAsset, yield: e.target.value})}
                      />
                   </div>
                   <div className="flex-[2]">
                      <label className="block text-gray-500 text-xs font-bold mb-1.5">备注</label>
                      <input 
-                      type="text"
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm"
-                      placeholder="选填"
-                      value={newAsset.remark}
-                      onChange={(e) => setNewAsset({...newAsset, remark: e.target.value})}
+                      type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm"
+                      placeholder="选填" value={newAsset.remark} onChange={(e) => setNewAsset({...newAsset, remark: e.target.value})}
                      />
                   </div>
               </div>
-
             <div className="flex gap-3 mt-8">
-              <button 
-                onClick={() => setShowAddModal(false)}
-                className="flex-1 py-3.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-sm"
-              >
-                取消
-              </button>
-              <button 
-                onClick={handleAddAsset}
-                className="flex-1 py-3.5 rounded-xl bg-gray-900 text-white font-bold text-sm shadow-lg active:scale-95 transition"
-              >
-                确认
-              </button>
+              <button onClick={() => setShowAddModal(false)} className="flex-1 py-3.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-sm">取消</button>
+              <button onClick={handleAddAsset} className="flex-1 py-3.5 rounded-xl bg-gray-900 text-white font-bold text-sm shadow-lg">确认</button>
             </div>
           </div>
         </div>
+      </div>
       )}
 
-      {/* Edit Transaction Modal */}
-      {editingTransaction && (
-         <EditTransactionModal 
-            transaction={editingTransaction.transaction}
-            onSave={handleUpdateTransaction}
-            onDelete={() => handleDeleteTransaction(editingTransaction.transaction.id)}
-            onClose={() => setEditingTransaction(null)}
-         />
-      )}
-
-      {/* Confirm Delete Asset Modal */}
+      {/* Other Modals */}
+      {editingAssetInfo && <EditAssetInfoModal asset={editingAssetInfo} onSave={handleSaveAssetInfo} onClose={() => setEditingAssetInfo(null)} />}
+      {editingTransaction && <EditTransactionModal transaction={editingTransaction.transaction} onSave={handleUpdateTransaction} onDelete={() => handleDeleteTransaction(editingTransaction.transaction.id)} onClose={() => setEditingTransaction(null)} />}
       {confirmDeleteAssetId && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
-          <div className="bg-white w-full max-w-xs rounded-2xl p-6 shadow-2xl animate-scaleIn">
+          <div className="bg-white w-full max-w-xs rounded-2xl p-6 shadow-2xl">
              <div className="flex flex-col items-center text-center mb-6">
-               <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                 <AlertTriangle size={24} className="text-red-500" />
-               </div>
+               <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4"><AlertTriangle size={24} className="text-red-500" /></div>
                <h3 className="text-lg font-bold text-gray-800">确认删除该资产？</h3>
-               <p className="text-sm text-gray-500 mt-2 leading-relaxed">删除后，该资产的所有历史记录和收益明细将无法恢复。</p>
+               <p className="text-sm text-gray-500 mt-2">删除后，该资产的所有历史记录和收益明细将无法恢复。</p>
              </div>
              <div className="flex gap-3">
-               <button 
-                 onClick={() => setConfirmDeleteAssetId(null)}
-                 className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm"
-               >
-                 取消
-               </button>
-               <button 
-                 onClick={executeDeleteAsset}
-                 className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold text-sm shadow-lg shadow-red-200"
-               >
-                 确认删除
-               </button>
+               <button onClick={() => setConfirmDeleteAssetId(null)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm">取消</button>
+               <button onClick={executeDeleteAsset} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold text-sm">确认删除</button>
              </div>
           </div>
         </div>
       )}
-
-      {/* Guide Modal */}
       {showGuide && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-6 animate-fadeIn">
           <div className="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl">
              <h2 className="text-2xl font-bold text-gray-800 mb-6">使用说明</h2>
              <div className="space-y-4 text-gray-600 text-sm leading-relaxed">
-               <p>👋 <strong>欢迎使用资产管家</strong></p>
                <ul className="list-disc pl-5 space-y-2">
                  <li><strong>货币切换</strong>：点击顶部总资产旁的货币符号，可切换 CNY/USD/HKD 显示。</li>
-                 <li><strong>记录资产</strong>：点击底部“记一笔”添加资产，支持选择货币种类。</li>
-                 <li><strong>AI 智能识别</strong>：点击底部“AI 识别”按钮，可自动创建或更新资产。</li>
-                 <li><strong>数据安全</strong>：所有数据仅存储在您的本地浏览器中。</li>
+                 <li><strong>混合货币支持</strong>：现在支持本金和收益使用不同的货币（例如：美元理财，人民币收益）。在“AI 识别”或“修改信息”中可自动或手动调整。</li>
+                 <li><strong>记录资产</strong>：点击底部“记一笔”添加资产。</li>
+                 <li><strong>AI 智能识别</strong>：支持上传支付宝/银行App的截图，自动识别资产和收益。</li>
                </ul>
              </div>
              <button onClick={() => setShowGuide(false)} className="mt-8 w-full py-3 bg-gray-900 text-white font-bold rounded-xl active:scale-95 transition">开始使用</button>
           </div>
         </div>
       )}
-
     </div>
   );
-}
-`
 }
