@@ -4,7 +4,7 @@ import {
   Plus, ChevronDown, HelpCircle, History, Calendar, Wallet, 
   Pencil, X, TrendingUp, RefreshCw, Camera, Trash2, Settings, 
   AlertTriangle, Sparkles, ArrowRightLeft, Loader2, UserCircle, LogOut, 
-  UploadCloud, CheckCircle2
+  UploadCloud, CheckCircle2, Mail, Lock, ArrowRight
 } from 'lucide-react';
 
 // Firebase Imports
@@ -13,9 +13,10 @@ import {
   getAuth, 
   onAuthStateChanged,
   User,
-  signInAnonymously,
-  signInWithCustomToken,
-  signOut
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  AuthError
 } from "firebase/auth";
 import { 
   getFirestore, 
@@ -28,7 +29,7 @@ import {
   onSnapshot
 } from "firebase/firestore";
 
-// --- SERVICES: GEMINI AI (Merged for Single-File Environment) ---
+// --- SERVICES: GEMINI AI ---
 
 export interface AIAssetRecord {
   date: string;
@@ -72,16 +73,12 @@ const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promi
   });
 };
 
-// 预览环境自动注入 API Key，无需 import.meta
 // 读取环境变量中的 Key
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
 
 const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRecord[]> => {
   if (!base64Image) return [];
 
-  // 在预览环境中，apiKey 会被自动处理。
-  // 注意：在您的本地 GitHub 代码中，请使用 import.meta.env.VITE_GEMINI_API_KEY
-  
   try {
     const compressedDataUrl = await compressImage(base64Image);
     const parts = compressedDataUrl.split(',');
@@ -146,8 +143,7 @@ const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRe
 };
 
 /**
- * --- FIREBASE CONFIGURATION (PREVIEW COMPATIBLE) ---
- * 适配预览环境的特殊配置注入
+ * --- FIREBASE CONFIGURATION ---
  */
 // @ts-ignore
 const firebaseConfig = {
@@ -170,7 +166,7 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
  * --- TYPES & CONSTANTS ---
  */
 
-const COLORS = ['#3b82f6', '#fbbf24', '#a855f7', '#f87171']; // Blue, Gold, Purple, Red
+const COLORS = ['#3b82f6', '#fbbf24', '#a855f7', '#f87171']; 
 
 export enum AssetType {
   FUND = 'Fund',
@@ -212,10 +208,8 @@ const RATES: Record<Currency, number> = {
 
 const getSymbol = (c: Currency) => c === 'USD' ? '$' : c === 'HKD' ? 'HK$' : '¥';
 
-// 货币转换辅助函数
 const convertCurrency = (amount: number, from: Currency, to: Currency) => {
   if (from === to) return amount;
-  // Convert to CNY then to Target
   const amountInCNY = amount * RATES[from];
   return amountInCNY / RATES[to];
 };
@@ -226,20 +220,14 @@ const convertCurrency = (amount: number, from: Currency, to: Currency) => {
 
 const normalizeString = (str: string) => str ? str.replace(/\s+/g, '').toLowerCase() : '';
 
-// 智能模糊匹配
 const findMatchingAsset = (assets: Asset[], targetName: string, targetInst: string, targetCurrency: string): Asset | undefined => {
   return assets.find(a => {
-    // 1. 货币必须一致
     if (a.currency !== targetCurrency && a.earningsCurrency !== targetCurrency) return false;
-    
-    // 2. 机构名称匹配 (可选)
     if (targetInst) {
        const instA = normalizeString(a.institution);
        const instB = normalizeString(targetInst);
        if (!instA.includes(instB) && !instB.includes(instA)) return false;
     }
-
-    // 3. 产品名称模糊匹配
     const nameA = normalizeString(a.productName);
     const nameB = normalizeString(targetName);
     return nameA === nameB || nameA.includes(nameB) || nameB.includes(nameA);
@@ -252,12 +240,11 @@ const getUniqueProductNames = (assets: Asset[]): string[] => {
   return Array.from(names);
 };
 
-// 数据聚合逻辑
 const consolidateAssets = (rawAssets: Asset[]): Asset[] => {
   return rawAssets.map(asset => {
     let totalPrincipalBase = 0; 
-    let totalEarningsBase = 0;  // For calculating total amount (converted to base)
-    let totalEarningsDisplay = 0; // For displaying earnings (in earnings currency)
+    let totalEarningsBase = 0;
+    let totalEarningsDisplay = 0; 
     const dailyMap: Record<string, number> = {}; 
 
     const sortedHistory = [...asset.history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -268,12 +255,9 @@ const consolidateAssets = (rawAssets: Asset[]): Asset[] => {
       if (tx.type === 'deposit') {
         totalPrincipalBase += convertCurrency(tx.amount, txCurrency, asset.currency);
       } else if (tx.type === 'earning') {
-        // Accumulate for display (e.g. USD earnings shown in USD)
         const earningForDisplay = convertCurrency(tx.amount, txCurrency, asset.earningsCurrency || asset.currency);
         totalEarningsDisplay += earningForDisplay;
         dailyMap[tx.date] = (dailyMap[tx.date] || 0) + earningForDisplay;
-
-        // Accumulate for Principal Total (e.g. USD earnings converted to CNY principal if needed)
         const earningForBase = convertCurrency(tx.amount, txCurrency, asset.currency);
         totalEarningsBase += earningForBase;
       }
@@ -294,6 +278,110 @@ const consolidateAssets = (rawAssets: Asset[]): Asset[] => {
 /**
  * --- INTERNAL COMPONENTS ---
  */
+
+// 登录注册组件
+const AuthScreen: React.FC = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isRegister, setIsRegister] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      if (isRegister) {
+        await createUserWithEmailAndPassword(auth, email, password);
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    } catch (err: any) {
+      console.error(err);
+      let msg = '操作失败，请重试';
+      if (err.code === 'auth/invalid-email') msg = '邮箱格式不正确';
+      if (err.code === 'auth/user-not-found') msg = '用户不存在，请先注册';
+      if (err.code === 'auth/wrong-password') msg = '密码错误';
+      if (err.code === 'auth/email-already-in-use') msg = '该邮箱已被注册';
+      if (err.code === 'auth/weak-password') msg = '密码太弱，至少需要6位';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#ededed] p-4">
+      <div className="bg-white w-full max-w-sm rounded-2xl p-8 shadow-xl animate-scaleIn">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-gray-900 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+             <Wallet className="text-white" size={32} />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-800">资产管家</h1>
+          <p className="text-gray-500 text-sm mt-2">安全、智能的个人财富管理助手</p>
+        </div>
+        
+        <form onSubmit={handleAuth} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">电子邮箱</label>
+            <div className="relative">
+              <input 
+                type="email" 
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-10 pr-4 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
+                placeholder="name@example.com"
+              />
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">密码</label>
+            <div className="relative">
+              <input 
+                type="password" 
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-10 pr-4 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
+                placeholder="••••••••"
+              />
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            </div>
+          </div>
+
+          {error && (
+            <div className="text-red-500 text-xs font-bold bg-red-50 p-3 rounded-lg flex items-center gap-2">
+              <AlertTriangle size={14} /> {error}
+            </div>
+          )}
+
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full py-3.5 bg-gray-900 text-white font-bold rounded-xl shadow-lg hover:bg-black active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
+            {loading ? <Loader2 className="animate-spin" size={20} /> : (
+              <>{isRegister ? '注册账号' : '立即登录'} <ArrowRight size={18} /></>
+            )}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center">
+          <button 
+            onClick={() => { setIsRegister(!isRegister); setError(''); }}
+            className="text-sm font-bold text-blue-500 hover:text-blue-600 transition-colors"
+          >
+            {isRegister ? '已有账号？去登录' : '没有账号？注册新账号'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const SmartInput: React.FC<{
   label: string; value: string; onChange: (val: string) => void; suggestions: string[]; placeholder?: string;
@@ -604,7 +692,7 @@ const UserProfileModal: React.FC<{ user: User; onClose: () => void; onLogout: ()
         <div className="flex flex-col items-center mb-6">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4"><UserCircle size={48} className="text-gray-400" /></div>
           <h3 className="font-bold text-lg text-gray-800">当前账号</h3>
-          <p className="text-sm text-gray-500 font-mono mt-1 text-center truncate w-full px-4">{user.isAnonymous ? "匿名用户 (数据仅在本地/当前会话有效)" : user.email || user.uid}</p>
+          <p className="text-sm text-gray-500 font-mono mt-1 text-center truncate w-full px-4">{user.email || user.uid}</p>
         </div>
         <div className="space-y-3">
           <button onClick={onLogout} className="w-full py-3.5 bg-red-50 text-red-500 font-bold text-sm rounded-xl flex items-center justify-center gap-2 hover:bg-red-100 transition"><LogOut size={16} /> 退出登录</button>
@@ -638,19 +726,8 @@ export default function App() {
   const [confirmDeleteAssetId, setConfirmDeleteAssetId] = useState<string | null>(null);
   const [newAsset, setNewAsset] = useState<{ institution: string; productName: string; type: AssetType; currency: Currency; amount: string; date: string; yield: string; remark: string; }>({ institution: '', productName: '', type: AssetType.FUND, currency: 'CNY', amount: '', date: new Date().toISOString().split('T')[0], yield: '', remark: '' });
 
-  // Auth & Data
+  // Auth Logic
   useEffect(() => {
-    const initAuth = async () => {
-      // @ts-ignore
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        // @ts-ignore
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        await signInAnonymously(auth);
-      }
-    };
-    initAuth();
-
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setAuthLoading(false);
@@ -658,8 +735,12 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Data Loading
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setAssets([]); // Clear assets on logout
+      return;
+    }
     const q = query(collection(db, 'artifacts', appId, 'users', user.uid, 'assets'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const loaded: Asset[] = [];
@@ -668,25 +749,6 @@ export default function App() {
     });
     return () => unsubscribe();
   }, [user]);
-
-  // --- Derived State & Calculations (RESTORED) ---
-  const totalAssets = assets.reduce((sum, a) => sum + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0);
-  const totalEarnings = assets.reduce((sum, a) => sum + convertCurrency(a.totalEarnings, a.earningsCurrency || a.currency, dashboardCurrency), 0);
-
-  const chartData = [
-    { name: '基金', value: assets.filter(a => a.type === AssetType.FUND).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
-    { name: '黄金', value: assets.filter(a => a.type === AssetType.GOLD).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
-    { name: '其他', value: assets.filter(a => a.type === AssetType.OTHER).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
-  ].filter(d => d.value > 0);
-
-  const assetsByInstitution = useMemo(() => {
-    return assets.reduce((groups, asset) => {
-      const key = asset.institution || '其他';
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(asset);
-      return groups;
-    }, {} as Record<string, Asset[]>);
-  }, [assets]);
 
   // Handlers
   const handleAIUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -705,7 +767,6 @@ export default function App() {
       const flatRecords = records.flat();
       if (manualCurrency) flatRecords.forEach(r => r.currency = manualCurrency as Currency);
       
-      // Group by Product
       const groups = new Map<string, { product: string; currency: Currency; type: AssetType; inst: string; records: AIAssetRecord[] }>();
       flatRecords.forEach(r => {
          const key = `${r.productName}|${r.currency || 'CNY'}`;
@@ -728,13 +789,10 @@ export default function App() {
 
          if (targetId) {
             const asset = assets.find(a => a.id === targetId)!;
-            // Filter duplicates
             const uniqueTx = newTx.filter(tx => !asset.history.some(h => h.date === tx.date && h.type === tx.type && Math.abs(h.amount - tx.amount) < 0.01));
             if (uniqueTx.length) {
                const assetRef = doc(db, 'artifacts', appId, 'users', user.uid, 'assets', targetId);
-               // Update history and ensure it's sorted
                const updatedHistory = [...uniqueTx, ...asset.history];
-               // Update Earnings Currency if necessary
                let earningsCurrencyUpdate = asset.earningsCurrency;
                uniqueTx.forEach(tx => {
                    if (tx.type === 'earning' && tx.currency && tx.currency !== asset.currency) {
@@ -779,7 +837,76 @@ export default function App() {
      setShowAddModal(false);
   };
 
+  const handleUpdateTransaction = async (updatedTx: Transaction) => {
+    if (!editingTransaction || !user) return;
+    const asset = assets.find(a => a.id === editingTransaction.assetId);
+    if (!asset) return;
+    const newHistory = asset.history.map(tx => tx.id === updatedTx.id ? updatedTx : tx);
+    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', asset.id), { history: newHistory });
+    setEditingTransaction(null);
+  };
+
+  const handleDeleteTransaction = async (txId: string) => {
+    if (!editingTransaction || !user) return;
+    const asset = assets.find(a => a.id === editingTransaction.assetId);
+    if (!asset) return;
+    const newHistory = asset.history.filter(tx => tx.id !== txId);
+    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', asset.id), { history: newHistory });
+    setEditingTransaction(null);
+  };
+
+  const handleDeleteSpecificTransaction = async (assetId: string, txId: string) => {
+    if (!user) return;
+    const asset = assets.find(a => a.id === assetId);
+    if (!asset) return;
+    const newHistory = asset.history.filter(tx => tx.id !== txId);
+    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', assetId), { history: newHistory });
+  };
+
+  const handleSaveAssetInfo = async (updatedAsset: Asset) => {
+    if (!user) return;
+    const { id, currentAmount, totalEarnings, dailyEarnings, history, ...rest } = updatedAsset;
+    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', id), rest);
+    setEditingAssetInfo(null);
+  };
+
+  const handleDeleteAssetRequest = (id: string) => {
+    setConfirmDeleteAssetId(id);
+  };
+
+  const executeDeleteAsset = async () => {
+    if (!confirmDeleteAssetId || !user) return;
+    await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', confirmDeleteAssetId));
+    setConfirmDeleteAssetId(null);
+  };
+
+  // --- RENDERING ---
+
   if (authLoading) return <div className="min-h-screen flex items-center justify-center bg-[#ededed]"><Loader2 className="animate-spin text-gray-400" size={32} /></div>;
+
+  // 如果没有登录，显示登录界面
+  if (!user) {
+    return <AuthScreen />;
+  }
+
+  // 计算和图表逻辑
+  const totalAssets = assets.reduce((sum, a) => sum + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0);
+  const totalEarnings = assets.reduce((sum, a) => sum + convertCurrency(a.totalEarnings, a.earningsCurrency || a.currency, dashboardCurrency), 0);
+
+  const chartData = [
+    { name: '基金', value: assets.filter(a => a.type === AssetType.FUND).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
+    { name: '黄金', value: assets.filter(a => a.type === AssetType.GOLD).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
+    { name: '其他', value: assets.filter(a => a.type === AssetType.OTHER).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
+  ].filter(d => d.value > 0);
+
+  const assetsByInstitution = useMemo(() => {
+    return assets.reduce((groups, asset) => {
+      const key = asset.institution || '其他';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(asset);
+      return groups;
+    }, {} as Record<string, Asset[]>);
+  }, [assets]);
 
   return (
     <div className="min-h-screen bg-[#ededed] text-[#111111] pb-32 font-sans">
