@@ -89,15 +89,16 @@ const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRe
     const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
     const year = new Date().getFullYear();
 
+    // 优化后的 Prompt：增强了对重复信息的清洗指令，明确区分机构和付款方式
     const prompt = `
-      Analyze this screenshot of an investment/banking app (e.g., Alipay, WeChat Wealth, Bank Apps).
+      Analyze this screenshot of an investment/banking app.
       YOUR GOAL: Extract transaction data and identifying product details to group records correctly.
 
       KEY EXTRACTION RULES:
-      1. **Product Name** (CRITICAL): Extract FULL product name. IGNORE codes like "(001234)".
-      2. **Institution**: Standardize names (Alipay, WeChat, ICBC, etc.).
+      1. **Product Name** (CRITICAL): Extract FULL product name but REMOVE currency suffixes like "USD" if they are redundant.
+      2. **Institution**: Identify the Fund House or App Name (e.g., "China Asset Management"). DO NOT use "Payment Method" (e.g., "ZA Bank") as the Institution unless no other name is visible.
       3. **Transaction Type**:
-         - **deposit**: "Buy", "Purchase", "买入", "申购", "确认成功", "交易成功".
+         - **deposit**: "Buy", "Purchase", "买入", "申购", "确认成功", "交易成功", "已交收".
          - **earning**: "Income", "Profit", "收益", "昨收", "+xx.xx".
       4. **Date**: YYYY-MM-DD. Handle "Yesterday"=${yesterdayStr}, "Today"=${todayStr}. Default year=${year}.
       5. **Asset Type**: Infer Fund/Gold/Other based on keywords (e.g., "Gold", "ETF", "Bond").
@@ -215,22 +216,36 @@ const convertCurrency = (amount: number, from: Currency, to: Currency) => {
 };
 
 /**
- * --- UTILS ---
+ * --- UTILS (ENHANCED MATCHING) ---
  */
 
-const normalizeString = (str: string) => str ? str.replace(/\s+/g, '').toLowerCase() : '';
+// 升级版：更激进的字符串清洗，移除币种、括号、标点符号，只保留核心字符
+const normalizeString = (str: string) => {
+    if (!str) return '';
+    return str
+        .replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '') // 只保留中文、英文、数字
+        .replace(/usd|cny|hkd|rmb/gi, '') // 移除常见的币种词汇
+        .replace(/bacc|acc/gi, '') // 移除常见的基金后缀 (如 B Acc)
+        .toLowerCase();
+};
 
+// 升级版：模糊匹配逻辑
 const findMatchingAsset = (assets: Asset[], targetName: string, targetInst: string, targetCurrency: string): Asset | undefined => {
   return assets.find(a => {
+    // 1. 货币必须一致 (这是硬性指标)
     if (a.currency !== targetCurrency && a.earningsCurrency !== targetCurrency) return false;
-    if (targetInst) {
-       const instA = normalizeString(a.institution);
-       const instB = normalizeString(targetInst);
-       if (!instA.includes(instB) && !instB.includes(instA)) return false;
+    
+    const normTargetName = normalizeString(targetName);
+    const normAssetName = normalizeString(a.productName);
+
+    // 2. 核心名称匹配 (只要核心名称互相包含，就认为是同一个，忽略机构差异)
+    // 逻辑：如果 "华夏精选美元货币基金" (资产A) 和 "华夏精选美元货币基金(B Acc)" (新数据)
+    // 归一化后变成 "华夏精选美元货币基金" 和 "华夏精选美元货币基金"，完全匹配。
+    if (normAssetName.includes(normTargetName) || normTargetName.includes(normAssetName)) {
+        return true;
     }
-    const nameA = normalizeString(a.productName);
-    const nameB = normalizeString(targetName);
-    return nameA === nameB || nameA.includes(nameB) || nameB.includes(nameA);
+    
+    return false;
   });
 };
 
@@ -279,7 +294,6 @@ const consolidateAssets = (rawAssets: Asset[]): Asset[] => {
  * --- INTERNAL COMPONENTS ---
  */
 
-// 登录注册组件
 const AuthScreen: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -727,7 +741,7 @@ export default function App() {
   const [confirmDeleteAssetId, setConfirmDeleteAssetId] = useState<string | null>(null);
   const [newAsset, setNewAsset] = useState<{ institution: string; productName: string; type: AssetType; currency: Currency; amount: string; date: string; yield: string; remark: string; }>({ institution: '', productName: '', type: AssetType.FUND, currency: 'CNY', amount: '', date: new Date().toISOString().split('T')[0], yield: '', remark: '' });
 
-  // Auth Logic
+  // 1. Move ALL Hooks (including useMemo) BEFORE any conditional return
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -736,7 +750,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Data Loading
   useEffect(() => {
     if (!user) {
       setAssets([]); // Clear assets on logout
@@ -750,6 +763,24 @@ export default function App() {
     });
     return () => unsubscribe();
   }, [user]);
+
+  const totalAssets = assets.reduce((sum, a) => sum + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0);
+  const totalEarnings = assets.reduce((sum, a) => sum + convertCurrency(a.totalEarnings, a.earningsCurrency || a.currency, dashboardCurrency), 0);
+
+  const chartData = [
+    { name: '基金', value: assets.filter(a => a.type === AssetType.FUND).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
+    { name: '黄金', value: assets.filter(a => a.type === AssetType.GOLD).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
+    { name: '其他', value: assets.filter(a => a.type === AssetType.OTHER).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
+  ].filter(d => d.value > 0);
+
+  const assetsByInstitution = useMemo(() => {
+    return assets.reduce((groups, asset) => {
+      const key = asset.institution || '其他';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(asset);
+      return groups;
+    }, {} as Record<string, Asset[]>);
+  }, [assets]);
 
   // Handlers
   const handleAIUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -880,27 +911,6 @@ export default function App() {
     await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', confirmDeleteAssetId));
     setConfirmDeleteAssetId(null);
   };
-
-  // --- RENDERING (FIXED ORDER) ---
-
-  // 1. Move ALL Hooks (including useMemo) BEFORE any conditional return
-  const totalAssets = assets.reduce((sum, a) => sum + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0);
-  const totalEarnings = assets.reduce((sum, a) => sum + convertCurrency(a.totalEarnings, a.earningsCurrency || a.currency, dashboardCurrency), 0);
-
-  const chartData = [
-    { name: '基金', value: assets.filter(a => a.type === AssetType.FUND).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
-    { name: '黄金', value: assets.filter(a => a.type === AssetType.GOLD).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
-    { name: '其他', value: assets.filter(a => a.type === AssetType.OTHER).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
-  ].filter(d => d.value > 0);
-
-  const assetsByInstitution = useMemo(() => {
-    return assets.reduce((groups, asset) => {
-      const key = asset.institution || '其他';
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(asset);
-      return groups;
-    }, {} as Record<string, Asset[]>);
-  }, [assets]);
 
   // 2. NOW we can do conditional returns safely
   if (authLoading) return <div className="min-h-screen flex items-center justify-center bg-[#ededed]"><Loader2 className="animate-spin text-gray-400" size={32} /></div>;
