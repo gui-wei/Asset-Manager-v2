@@ -305,6 +305,7 @@ const AuthScreen: React.FC = () => {
       if (err.code === 'auth/wrong-password') msg = '密码错误';
       if (err.code === 'auth/email-already-in-use') msg = '该邮箱已被注册';
       if (err.code === 'auth/weak-password') msg = '密码太弱，至少需要6位';
+      if (err.code === 'auth/invalid-credential') msg = '账号或密码错误';
       setError(msg);
     } finally {
       setLoading(false);
@@ -880,16 +881,9 @@ export default function App() {
     setConfirmDeleteAssetId(null);
   };
 
-  // --- RENDERING ---
+  // --- RENDERING (FIXED ORDER) ---
 
-  if (authLoading) return <div className="min-h-screen flex items-center justify-center bg-[#ededed]"><Loader2 className="animate-spin text-gray-400" size={32} /></div>;
-
-  // 如果没有登录，显示登录界面
-  if (!user) {
-    return <AuthScreen />;
-  }
-
-  // 计算和图表逻辑
+  // 1. Move ALL Hooks (including useMemo) BEFORE any conditional return
   const totalAssets = assets.reduce((sum, a) => sum + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0);
   const totalEarnings = assets.reduce((sum, a) => sum + convertCurrency(a.totalEarnings, a.earningsCurrency || a.currency, dashboardCurrency), 0);
 
@@ -907,6 +901,14 @@ export default function App() {
       return groups;
     }, {} as Record<string, Asset[]>);
   }, [assets]);
+
+  // 2. NOW we can do conditional returns safely
+  if (authLoading) return <div className="min-h-screen flex items-center justify-center bg-[#ededed]"><Loader2 className="animate-spin text-gray-400" size={32} /></div>;
+
+  // 如果没有登录，显示登录界面
+  if (!user) {
+    return <AuthScreen />;
+  }
 
   return (
     <div className="min-h-screen bg-[#ededed] text-[#111111] pb-32 font-sans">
