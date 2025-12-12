@@ -73,7 +73,8 @@ const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promi
 };
 
 // 预览环境自动注入 API Key，无需 import.meta
-const apiKey = ""; 
+// 读取环境变量中的 Key
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
 
 const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRecord[]> => {
   if (!base64Image) return [];
@@ -149,10 +150,14 @@ const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRe
  * 适配预览环境的特殊配置注入
  */
 // @ts-ignore
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-  apiKey: "PLACEHOLDER", // 在本地请替换为真实配置
-  authDomain: "PLACEHOLDER",
-  projectId: "PLACEHOLDER"
+const firebaseConfig = {
+  apiKey: "AIzaSyCcWjG9efLujQ2dc4Aunn4TQhOsWfL0K5I",
+  authDomain: "asset-manager-v2.firebaseapp.com",
+  projectId: "asset-manager-v2",
+  storageBucket: "asset-manager-v2.firebasestorage.app",
+  messagingSenderId: "476410671438",
+  appId: "1:476410671438:web:2adb008bbb4c448be1ae1f",
+  measurementId: "G-BYRH32EHH9"
 };
 
 const app = initializeApp(firebaseConfig);
