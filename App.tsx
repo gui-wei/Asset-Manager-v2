@@ -491,9 +491,10 @@ const EarningsCalendar: React.FC<{ asset: Asset; onClose: () => void; }> = ({ as
                 <div key={day} className="flex flex-col items-center justify-start pt-1 h-14 rounded-lg bg-gray-50 border border-gray-100 relative overflow-hidden group hover:border-blue-200 transition-colors">
                   <span className="text-[10px] font-medium text-gray-400 mb-0.5 group-hover:text-blue-500">{day}</span>
                   {earning !== 0 && (
-                     <span className={`text-[9px] font-bold leading-tight ${earning > 0 ? 'text-red-500' : 'text-green-600'}`}>{earning > 0 ? '+' : ''}{earningsSymbol}{Math.abs(earning).toFixed(0)}</span>
+                     // 🔥 关键修改：toFixed(2) 保留两位小数，tracking-tighter 防止文字过长换行
+                     <span className={`text-[9px] font-bold leading-tight tracking-tighter ${earning > 0 ? 'text-red-500' : 'text-green-600'}`}>{earning > 0 ? '+' : ''}{earningsSymbol}{Math.abs(earning).toFixed(2)}</span>
                   )}
-                  {deposits > 0 && <span className="text-[9px] font-bold text-blue-500 leading-tight">+{principalSymbol}{deposits.toLocaleString()}</span>}
+                  {deposits > 0 && <span className="text-[9px] font-bold text-blue-500 leading-tight tracking-tighter">+{principalSymbol}{deposits.toLocaleString(undefined, {maximumFractionDigits:0})}</span>}
                 </div>
               );
             })}
@@ -567,7 +568,6 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
   const earningsCurrency = asset.earningsCurrency || asset.currency;
   const earningsSymbol = getSymbol(earningsCurrency);
   
-  // 🔥🔥🔥 关键修复：计算本金时，先把收益转回本金货币，再相减！
   // 1. Calculate Principal (Total Amount - Total Earnings)
   const totalEarningsInBase = convertCurrency(asset.totalEarnings, earningsCurrency, asset.currency);
   const principal = asset.currentAmount - totalEarningsInBase;
@@ -584,7 +584,6 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
     const dateStr = d.toISOString().split('T')[0];
     sum7DayEarningsDisplay += (asset.dailyEarnings[dateStr] || 0);
   }
-  // 🔥🔥🔥 关键修复：7日收益也必须转回本金货币！
   const sum7DayEarningsInBase = convertCurrency(sum7DayEarningsDisplay, earningsCurrency, asset.currency);
   const real7DayYield = principal > 0 ? (sum7DayEarningsInBase / principal) * (365 / 7) * 100 : 0;
 
