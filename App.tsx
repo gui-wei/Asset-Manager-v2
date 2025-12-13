@@ -4,7 +4,7 @@ import {
   Plus, ChevronDown, HelpCircle, History, Calendar, Wallet, 
   Pencil, X, TrendingUp, RefreshCw, Camera, Trash2, Settings, 
   AlertTriangle, Sparkles, ArrowRightLeft, Loader2, UserCircle, LogOut, 
-  UploadCloud, CheckCircle2, Mail, Lock, ArrowRight, Percent, Clock
+  UploadCloud, CheckCircle2, Mail, Lock, ArrowRight, Percent, Clock, BarChart4
 } from 'lucide-react';
 
 // Firebase Imports
@@ -89,7 +89,7 @@ const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRe
     const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
     const year = new Date().getFullYear();
 
-    // 🔥 核心优化 Prompt：让 AI 像人类一样思考，而不是死板匹配
+    // 🔥 核心优化 Prompt：让 AI 像人类一样思考
     const prompt = `
       You are an expert personal finance assistant. Analyze this screenshot of an investment transaction.
       
@@ -231,7 +231,7 @@ const convertCurrency = (amount: number, from: Currency, to: Currency) => {
 };
 
 /**
- * --- UTILS (LOGIC RESTORED TO GENERAL) ---
+ * --- UTILS ---
  */
 
 const normalizeString = (str: string) => {
@@ -609,8 +609,8 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
           </div>
           <div className="flex items-center gap-3 shrink-0">
              <div className="text-right">
-              <p className="font-bold text-gray-900 text-lg font-mono tracking-tight leading-tight">{principalSymbol} {asset.currentAmount.toLocaleString()}</p>
-              <p className={`text-xs font-bold ${asset.totalEarnings >= 0 ? 'text-red-500' : 'text-green-500'}`}>{asset.totalEarnings >= 0 ? '+' : ''}{earningsSymbol} {asset.totalEarnings.toLocaleString()}</p>
+              <p className="font-bold text-gray-900 text-lg font-mono tracking-tight leading-tight">{principalSymbol} {asset.currentAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+              <p className={`text-xs font-bold ${asset.totalEarnings >= 0 ? 'text-red-500' : 'text-green-500'}`}>{asset.totalEarnings >= 0 ? '+' : ''}{earningsSymbol} {asset.totalEarnings.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
             </div>
           </div>
         </div>
@@ -789,6 +789,16 @@ export default function App() {
   const minDate = allDates.length > 0 ? allDates.reduce((min, d) => d < min ? d : min, allDates[0]) : null;
   const daysInvested = minDate ? Math.max(0, Math.floor((new Date().getTime() - new Date(minDate).getTime()) / (1000 * 60 * 60 * 24))) : 0;
 
+  // Calculate Annualized Yield (Compound Annual Growth Rate - CAGR)
+  // Formula: ((Total Value / Total Principal) ^ (365 / Days Invested)) - 1
+  // Note: Only calculate if invested for at least 7 days to avoid extreme volatility
+  let annualizedYield = 0;
+  if (totalPrincipal > 0 && daysInvested > 7) {
+      const growthRatio = totalAssets / totalPrincipal; // e.g. 1.05
+      const yearRatio = 365 / daysInvested; // e.g. 2.0 (if invested for 6 months)
+      annualizedYield = (Math.pow(growthRatio, yearRatio) - 1) * 100;
+  }
+
   const chartData = [
     { name: '基金', value: assets.filter(a => a.type === AssetType.FUND).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
     { name: '黄金', value: assets.filter(a => a.type === AssetType.GOLD).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
@@ -965,7 +975,7 @@ export default function App() {
               <div>
                  <div className="flex items-center gap-2 mb-1"><p className="text-gray-400 text-xs font-medium tracking-wide">总资产估值</p><button onClick={() => setDashboardCurrency(curr => curr === 'CNY' ? 'USD' : curr === 'USD' ? 'HKD' : 'CNY')} className="text-[10px] font-bold bg-white/10 px-1.5 py-0.5 rounded text-gray-300 hover:bg-white/20 transition flex items-center gap-0.5">{dashboardCurrency} <RefreshCw size={8} /></button></div>
                  <h2 className="text-3xl sm:text-4xl font-bold mb-4 font-mono tracking-tight animate-fadeIn">{dashboardCurrency === 'USD' ? '$' : dashboardCurrency === 'HKD' ? 'HK$' : '¥'} {totalAssets.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</h2>
-                 <div className="flex items-center gap-2">
+                 <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
                     {/* 累计收益卡片 */}
                     <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
                         <TrendingUp size={14} className="text-red-400" />
@@ -976,25 +986,37 @@ export default function App() {
                     </div>
                     {/* 持有收益率卡片 */}
                     <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
-                        <div className="flex flex-col items-end">
+                        <Percent size={14} className="text-yellow-400" />
+                        <div>
                             <p className="text-[10px] text-gray-400 leading-none mb-0.5">持有收益率</p>
                             <p className={`text-sm font-bold leading-none ${totalYield >= 0 ? 'text-red-400' : 'text-green-400'}`}>
                                 {totalYield >= 0 ? '+' : ''}{totalYield.toFixed(2)}%
                             </p>
                         </div>
                     </div>
-                    {/* 新增：投资时长卡片 */}
+                    {/* 投资时长卡片 */}
                     <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
-                        <div className="flex flex-col items-end">
+                        <Clock size={14} className="text-blue-400" />
+                        <div>
                             <p className="text-[10px] text-gray-400 leading-none mb-0.5">投资时长</p>
                             <p className="text-sm font-bold leading-none text-white">
                                 {daysInvested} 天
                             </p>
                         </div>
                     </div>
+                    {/* 新增：推测年化卡片 */}
+                    <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
+                        <BarChart4 size={14} className="text-purple-400" />
+                        <div>
+                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">推测年化</p>
+                            <p className={`text-sm font-bold leading-none ${annualizedYield >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                                {daysInvested > 7 ? (annualizedYield >= 0 ? '+' : '') + annualizedYield.toFixed(2) + '%' : '--'}
+                            </p>
+                        </div>
+                    </div>
                  </div>
               </div>
-              <div className="w-24 h-24 sm:w-32 sm:h-32 relative"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={chartData} innerRadius="60%" outerRadius="100%" paddingAngle={5} dataKey="value" stroke="none">{chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie></PieChart></ResponsiveContainer></div>
+              <div className="hidden sm:block w-32 h-32 relative"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={chartData} innerRadius="60%" outerRadius="100%" paddingAngle={5} dataKey="value" stroke="none">{chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie></PieChart></ResponsiveContainer></div>
            </div>
         </div>
       </div>
