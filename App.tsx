@@ -73,7 +73,6 @@ const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promi
   });
 };
 
-// 读取环境变量中的 Key
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
 
 const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRecord[]> => {
@@ -89,21 +88,35 @@ const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRe
     const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
     const year = new Date().getFullYear();
 
-    // 优化后的 Prompt：增强了对重复信息的清洗指令，明确区分机构和付款方式
     const prompt = `
-      Analyze this screenshot of an investment/banking app.
-      YOUR GOAL: Extract transaction data and identifying product details to group records correctly.
+      You are an expert personal finance assistant. Analyze this screenshot of an investment transaction.
+      
+      **GOAL**: Extract data to "Group" assets logically, like a human would.
 
-      KEY EXTRACTION RULES:
-      1. **Product Name** (CRITICAL): Extract FULL product name but REMOVE currency suffixes like "USD" if they are redundant.
-      2. **Institution**: Identify the Fund House or App Name (e.g., "China Asset Management"). DO NOT use "Payment Method" (e.g., "ZA Bank") as the Institution unless no other name is visible.
-      3. **Transaction Type**:
-         - **deposit**: "Buy", "Purchase", "买入", "申购", "确认成功", "交易成功", "已交收".
-         - **earning**: "Income", "Profit", "收益", "昨收", "+xx.xx".
-      4. **Date**: YYYY-MM-DD. Handle "Yesterday"=${yesterdayStr}, "Today"=${todayStr}. Default year=${year}.
-      5. **Asset Type**: Infer Fund/Gold/Other based on keywords (e.g., "Gold", "ETF", "Bond").
+      **INTELLIGENT EXTRACTION RULES**:
 
-      OUTPUT JSON ONLY: { "records": [ { "productName": "...", "institution": "...", "amount": number, "date": "...", "type": "...", "currency": "...", "assetType": "..." } ] }
+      1. **Date (CRITICAL T+N Logic)**:
+         - Financial transactions have "Order Time" and "Confirmation/Settlement Time".
+         - **RULE**: Always prioritize the **"Confirmation Date"** (确认日期, 确认交易, 结算日期, 完成日期) over the "Order Date".
+         - Only use "Order/Transaction Time" (下单时间) if NO confirmation date is visible.
+         - Format: YYYY-MM-DD.
+
+      2. **Product Name (Human-Like Grouping)**:
+         - Extract the **Core Product Name**.
+         - **Action**: Intelligent Cleaning. Remove noise that splits identical assets into duplicates.
+         - *Example*: If image says "China Fund USD (Class B Acc)", output "China Fund".
+         - Remove suffixes like "Class A/B/C", "(Acc)", "(Dist)", "USD/CNY" ONLY IF they are just redundant labels. 
+         - Keep unique identifiers if they denote a fundamentally different asset (e.g. "Bond Fund" vs "Equity Fund").
+
+      3. **Institution (Entity Recognition)**:
+         - Identify the **Asset Manager** or **Platform** holding the asset (e.g. "China Asset Mgmt", "Alipay").
+         - **Negative Rule**: Ignore "Payment Method" (付款方式). If the user paid via "ZA Bank" to buy a "China Fund", the Institution is "China Fund" (or the App name), NOT "ZA Bank".
+
+      4. **Type**:
+         - **deposit**: Capital inflow (Buy, Purchase, Subscription, 已交收).
+         - **earning**: Income (Profit, Dividend, Interest, 收益).
+
+      OUTPUT JSON ONLY: { "records": [ { "productName": "...", "institution": "...", "amount": number, "date": "...", "type": "deposit"|"earning", "currency": "CNY"|"USD"|"HKD", "assetType": "Fund"|"Gold"|"Other" } ] }
     `;
 
     const response = await fetch(
@@ -143,9 +156,7 @@ const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRe
   }
 };
 
-/**
- * --- FIREBASE CONFIGURATION ---
- */
+// --- FIREBASE CONFIGURATION ---
 // @ts-ignore
 const firebaseConfig = {
   apiKey: "AIzaSyCcWjG9efLujQ2dc4Aunn4TQhOsWfL0K5I",
@@ -179,7 +190,7 @@ export type Currency = 'CNY' | 'USD' | 'HKD';
 
 export interface Transaction {
   id: string;
-  date: string; // ISO Date string YYYY-MM-DD
+  date: string; 
   type: 'deposit' | 'earning';
   amount: number;
   currency?: Currency;
@@ -209,40 +220,35 @@ const RATES: Record<Currency, number> = {
 
 const getSymbol = (c: Currency) => c === 'USD' ? '$' : c === 'HKD' ? 'HK$' : '¥';
 
+// 核心汇率转换函数：将金额从 from 币种转换到 to 币种
 const convertCurrency = (amount: number, from: Currency, to: Currency) => {
   if (from === to) return amount;
+  // 先转成人民币(基准)，再转成目标币种
+  // Example: 100 USD -> 720 CNY
   const amountInCNY = amount * RATES[from];
+  // Example: 720 CNY -> ? HKD (720 / 0.92)
   return amountInCNY / RATES[to];
 };
 
 /**
- * --- UTILS (ENHANCED MATCHING) ---
+ * --- UTILS ---
  */
 
-// 升级版：更激进的字符串清洗，移除币种、括号、标点符号，只保留核心字符
 const normalizeString = (str: string) => {
     if (!str) return '';
     return str
-        .replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '') // 只保留中文、英文、数字
-        .replace(/usd|cny|hkd|rmb/gi, '') // 移除常见的币种词汇
-        .replace(/bacc|acc/gi, '') // 移除常见的基金后缀 (如 B Acc)
+        .replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '') 
         .toLowerCase();
 };
 
-// 升级版：模糊匹配逻辑
 const findMatchingAsset = (assets: Asset[], targetName: string, targetInst: string, targetCurrency: string): Asset | undefined => {
   return assets.find(a => {
-    // 1. 货币必须一致 (这是硬性指标)
     if (a.currency !== targetCurrency && a.earningsCurrency !== targetCurrency) return false;
-    
     const normTargetName = normalizeString(targetName);
     const normAssetName = normalizeString(a.productName);
-
-    // 2. 核心名称匹配 (只要核心名称互相包含，就认为是同一个，忽略机构差异)
     if (normAssetName.includes(normTargetName) || normTargetName.includes(normAssetName)) {
         return true;
     }
-    
     return false;
   });
 };
@@ -255,27 +261,34 @@ const getUniqueProductNames = (assets: Asset[]): string[] => {
 
 const consolidateAssets = (rawAssets: Asset[]): Asset[] => {
   return rawAssets.map(asset => {
-    let totalPrincipalBase = 0; 
-    let totalEarningsBase = 0;
-    let totalEarningsDisplay = 0; 
+    let totalPrincipalBase = 0; // 本金（已转换为资产主币种）
+    let totalEarningsBase = 0;  // 收益（已转换为资产主币种）
+    let totalEarningsDisplay = 0; // 收益（保持收益币种，仅用于显示数值）
     const dailyMap: Record<string, number> = {}; 
 
     const sortedHistory = [...asset.history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     sortedHistory.forEach(tx => {
+      // 每一笔交易的币种
       const txCurrency = tx.currency || (tx.type === 'deposit' ? asset.currency : (asset.earningsCurrency || asset.currency));
 
       if (tx.type === 'deposit') {
+        // 存入：必须统一转换为资产的【主币种】(asset.currency) 才能累加本金
         totalPrincipalBase += convertCurrency(tx.amount, txCurrency, asset.currency);
       } else if (tx.type === 'earning') {
+        // 收益：
+        // 1. 用于显示的数值（累加到 asset.earningsCurrency）
         const earningForDisplay = convertCurrency(tx.amount, txCurrency, asset.earningsCurrency || asset.currency);
         totalEarningsDisplay += earningForDisplay;
         dailyMap[tx.date] = (dailyMap[tx.date] || 0) + earningForDisplay;
+
+        // 2. 用于计算总资产的数值（累加到 asset.currency）
         const earningForBase = convertCurrency(tx.amount, txCurrency, asset.currency);
         totalEarningsBase += earningForBase;
       }
     });
     
+    // 总资产 = 统一换算后的本金 + 统一换算后的收益
     const currentAmount = totalPrincipalBase + totalEarningsBase;
 
     return {
@@ -561,19 +574,30 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
   const principalSymbol = getSymbol(asset.currency);
   const earningsCurrency = asset.earningsCurrency || asset.currency;
   const earningsSymbol = getSymbol(earningsCurrency);
-  const principal = asset.currentAmount - asset.totalEarnings;
-  const holdingYield = principal > 0 ? (asset.totalEarnings / principal) * 100 : 0;
   
-  // Real 7-day Yield
+  // 1. Calculate Principal (Total Amount - Total Earnings)
+  // 注意：这里的 totalEarnings 是【显示用】的累计值（可能是 USD），而 currentAmount 是【基准货币】的累计值（可能是 CNY）
+  // 必须统一单位：先把显示的收益 (earningsCurrency) 转回基准 (asset.currency)
+  const totalEarningsInBase = convertCurrency(asset.totalEarnings, earningsCurrency, asset.currency);
+  const principal = asset.currentAmount - totalEarningsInBase;
+  
+  // 2. Yield Calculation (Unified Currency: Asset Base Currency)
+  // 收益率 = (总收益_基准 / 总本金_基准) * 100
+  const holdingYield = principal > 0 ? (totalEarningsInBase / principal) * 100 : 0;
+  
+  // 3. Real 7-day Yield (Unified Currency)
   const today = new Date();
-  let sum7DayEarnings = 0;
+  let sum7DayEarningsDisplay = 0; // 这是显示币种（例如 CNY）的收益总和
   for (let i = 0; i < 7; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().split('T')[0];
-    sum7DayEarnings += (asset.dailyEarnings[dateStr] || 0);
+    sum7DayEarningsDisplay += (asset.dailyEarnings[dateStr] || 0);
   }
-  const real7DayYield = principal > 0 ? (sum7DayEarnings / principal) * (365 / 7) * 100 : 0;
+  // 同样，先把收益转回基准货币（例如 USD）
+  const sum7DayEarningsInBase = convertCurrency(sum7DayEarningsDisplay, earningsCurrency, asset.currency);
+  
+  const real7DayYield = principal > 0 ? (sum7DayEarningsInBase / principal) * (365 / 7) * 100 : 0;
 
   // Days held
   const getDaysHeld = () => {
@@ -603,8 +627,8 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
           </div>
           <div className="flex items-center gap-3 shrink-0">
              <div className="text-right">
-              <p className="font-bold text-gray-900 text-lg font-mono tracking-tight leading-tight">{principalSymbol} {asset.currentAmount.toLocaleString()}</p>
-              <p className={`text-xs font-bold ${asset.totalEarnings >= 0 ? 'text-red-500' : 'text-green-500'}`}>{asset.totalEarnings >= 0 ? '+' : ''}{earningsSymbol} {asset.totalEarnings.toLocaleString()}</p>
+              <p className="font-bold text-gray-900 text-lg font-mono tracking-tight leading-tight">{principalSymbol} {asset.currentAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+              <p className={`text-xs font-bold ${asset.totalEarnings >= 0 ? 'text-red-500' : 'text-green-500'}`}>{asset.totalEarnings >= 0 ? '+' : ''}{earningsSymbol} {asset.totalEarnings.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
             </div>
           </div>
         </div>
@@ -788,12 +812,12 @@ export default function App() {
     try {
       const records = await Promise.all(Array.from(e.target.files).map(async f => {
         const reader = new FileReader();
-        return new Promise<AIAssetRecord[]>((resolve, reject) => { // ADDED reject
+        return new Promise<AIAssetRecord[]>((resolve, reject) => { 
           reader.onload = async () => {
               try {
                   resolve(await analyzeEarningsScreenshot(reader.result as string));
               } catch (e) {
-                  reject(e); // CATCH async error
+                  reject(e); 
               }
           };
           reader.onerror = (e) => reject(e);
@@ -901,6 +925,7 @@ export default function App() {
     if (!asset) return;
     const newHistory = asset.history.filter(tx => tx.id !== txId);
     await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', assetId), { history: newHistory });
+    setEditingTransaction(null);
   };
 
   const handleSaveAssetInfo = async (updatedAsset: Asset) => {
@@ -939,8 +964,8 @@ export default function App() {
            <div className="flex justify-between items-center relative z-10">
               <div>
                  <div className="flex items-center gap-2 mb-1"><p className="text-gray-400 text-xs font-medium tracking-wide">总资产估值</p><button onClick={() => setDashboardCurrency(curr => curr === 'CNY' ? 'USD' : curr === 'USD' ? 'HKD' : 'CNY')} className="text-[10px] font-bold bg-white/10 px-1.5 py-0.5 rounded text-gray-300 hover:bg-white/20 transition flex items-center gap-0.5">{dashboardCurrency} <RefreshCw size={8} /></button></div>
-                 <h2 className="text-3xl sm:text-4xl font-bold mb-4 font-mono tracking-tight animate-fadeIn">{dashboardCurrency === 'USD' ? '$' : dashboardCurrency === 'HKD' ? 'HK$' : '¥'} {totalAssets.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</h2>
-                 <div className="flex items-center gap-2"><div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5"><TrendingUp size={14} className="text-red-400" /><div><p className="text-[10px] text-gray-400 leading-none mb-0.5">累计收益 ({dashboardCurrency})</p><p className="text-sm font-bold leading-none">{totalEarnings > 0 ? '+' : ''}{totalEarnings.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</p></div></div></div>
+                 <h2 className="text-3xl sm:text-4xl font-bold mb-4 font-mono tracking-tight animate-fadeIn">{dashboardCurrency === 'USD' ? '$' : dashboardCurrency === 'HKD' ? 'HK$' : '¥'} {totalAssets.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</h2>
+                 <div className="flex items-center gap-2"><div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5"><TrendingUp size={14} className="text-red-400" /><div><p className="text-[10px] text-gray-400 leading-none mb-0.5">累计收益 ({dashboardCurrency})</p><p className="text-sm font-bold leading-none">{totalEarnings > 0 ? '+' : ''}{totalEarnings.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p></div></div></div>
               </div>
               <div className="w-24 h-24 sm:w-32 sm:h-32 relative"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={chartData} innerRadius="60%" outerRadius="100%" paddingAngle={5} dataKey="value" stroke="none">{chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie></PieChart></ResponsiveContainer></div>
            </div>
