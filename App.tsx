@@ -4,7 +4,7 @@ import {
   Plus, ChevronDown, HelpCircle, History, Calendar, Wallet, 
   Pencil, X, TrendingUp, RefreshCw, Camera, Trash2, Settings, 
   AlertTriangle, Sparkles, ArrowRightLeft, Loader2, UserCircle, LogOut, 
-  UploadCloud, CheckCircle2, Mail, Lock, ArrowRight, Percent
+  UploadCloud, CheckCircle2, Mail, Lock, ArrowRight, Percent, Clock
 } from 'lucide-react';
 
 // Firebase Imports
@@ -567,25 +567,19 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
   const principalSymbol = getSymbol(asset.currency);
   const earningsCurrency = asset.earningsCurrency || asset.currency;
   const earningsSymbol = getSymbol(earningsCurrency);
+  const principal = asset.currentAmount - asset.totalEarnings;
+  const holdingYield = principal > 0 ? (asset.totalEarnings / principal) * 100 : 0;
   
-  // 1. Calculate Principal (Total Amount - Total Earnings)
-  const totalEarningsInBase = convertCurrency(asset.totalEarnings, earningsCurrency, asset.currency);
-  const principal = asset.currentAmount - totalEarningsInBase;
-  
-  // 2. Yield Calculation (Unified Currency: Asset Base Currency)
-  const holdingYield = principal > 0 ? (totalEarningsInBase / principal) * 100 : 0;
-  
-  // 3. Real 7-day Yield (Unified Currency)
+  // Real 7-day Yield
   const today = new Date();
-  let sum7DayEarningsDisplay = 0; 
+  let sum7DayEarnings = 0;
   for (let i = 0; i < 7; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().split('T')[0];
-    sum7DayEarningsDisplay += (asset.dailyEarnings[dateStr] || 0);
+    sum7DayEarnings += (asset.dailyEarnings[dateStr] || 0);
   }
-  const sum7DayEarningsInBase = convertCurrency(sum7DayEarningsDisplay, earningsCurrency, asset.currency);
-  const real7DayYield = principal > 0 ? (sum7DayEarningsInBase / principal) * (365 / 7) * 100 : 0;
+  const real7DayYield = principal > 0 ? (sum7DayEarnings / principal) * (365 / 7) * 100 : 0;
 
   // Days held
   const getDaysHeld = () => {
@@ -615,8 +609,8 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
           </div>
           <div className="flex items-center gap-3 shrink-0">
              <div className="text-right">
-              <p className="font-bold text-gray-900 text-lg font-mono tracking-tight leading-tight">{principalSymbol} {asset.currentAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
-              <p className={`text-xs font-bold ${asset.totalEarnings >= 0 ? 'text-red-500' : 'text-green-500'}`}>{asset.totalEarnings >= 0 ? '+' : ''}{earningsSymbol} {asset.totalEarnings.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+              <p className="font-bold text-gray-900 text-lg font-mono tracking-tight leading-tight">{principalSymbol} {asset.currentAmount.toLocaleString()}</p>
+              <p className={`text-xs font-bold ${asset.totalEarnings >= 0 ? 'text-red-500' : 'text-green-500'}`}>{asset.totalEarnings >= 0 ? '+' : ''}{earningsSymbol} {asset.totalEarnings.toLocaleString()}</p>
             </div>
           </div>
         </div>
@@ -675,7 +669,7 @@ const EditTransactionModal: React.FC<{ transaction: Transaction; onSave: (t: Tra
          <div className="flex justify-between items-center mb-6"><h3 className="font-bold text-lg text-gray-800">编辑记录</h3><button onClick={onClose}><X size={20} className="text-gray-400" /></button></div>
          <div className="space-y-4">
             <div><label className="text-xs text-gray-500 font-bold block mb-1.5">日期</label><input type="date" className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm" value={date} onChange={e => setDate(e.target.value)} /></div>
-            <div><label className="text-xs text-gray-500 font-bold block mb-1.5">金額</label><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm font-bold" value={amountStr} onChange={e => setAmountStr(e.target.value)} /></div>
+            <div><label className="text-xs text-gray-500 font-bold block mb-1.5">金额</label><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm font-bold" value={amountStr} onChange={e => setAmountStr(e.target.value)} /></div>
             <div><label className="text-xs text-gray-500 font-bold block mb-1.5">备注</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm" value={description} onChange={e => setDescription(e.target.value)} /></div>
          </div>
          <div className="flex gap-3 mt-8"><button onClick={onDelete} className="flex-1 py-2.5 bg-red-50 text-red-500 text-sm font-bold rounded-lg hover:bg-red-100 transition">删除</button><button onClick={handleSave} className="flex-1 py-2.5 bg-gray-900 text-white text-sm font-bold rounded-lg hover:bg-black transition">保存</button></div>
@@ -717,7 +711,7 @@ const UserProfileModal: React.FC<{ user: User; onClose: () => void; onLogout: ()
         <div className="flex flex-col items-center mb-6">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4"><UserCircle size={48} className="text-gray-400" /></div>
           <h3 className="font-bold text-lg text-gray-800">当前账号</h3>
-          <p className="text-sm text-gray-500 font-mono mt-1 text-center truncate w-full px-4">{user.email || user.uid}</p>
+          <p className="text-sm text-gray-500 font-mono mt-1 text-center truncate w-full px-4">{user.isAnonymous ? "匿名用户 (数据仅在本地/当前会话有效)" : user.email || user.uid}</p>
         </div>
         <div className="space-y-3">
           <button onClick={onLogout} className="w-full py-3.5 bg-red-50 text-red-500 font-bold text-sm rounded-xl flex items-center justify-center gap-2 hover:bg-red-100 transition"><LogOut size={16} /> 退出登录</button>
@@ -751,8 +745,19 @@ export default function App() {
   const [confirmDeleteAssetId, setConfirmDeleteAssetId] = useState<string | null>(null);
   const [newAsset, setNewAsset] = useState<{ institution: string; productName: string; type: AssetType; currency: Currency; amount: string; date: string; yield: string; remark: string; }>({ institution: '', productName: '', type: AssetType.FUND, currency: 'CNY', amount: '', date: new Date().toISOString().split('T')[0], yield: '', remark: '' });
 
-  // 1. Move ALL Hooks (including useMemo) BEFORE any conditional return
+  // Auth & Data
   useEffect(() => {
+    const initAuth = async () => {
+      // @ts-ignore
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        // @ts-ignore
+        await signInWithCustomToken(auth, __initial_auth_token);
+      } else {
+        await signInAnonymously(auth);
+      }
+    };
+    initAuth();
+
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setAuthLoading(false);
@@ -761,10 +766,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!user) {
-      setAssets([]); // Clear assets on logout
-      return;
-    }
+    if (!user) return;
     const q = query(collection(db, 'artifacts', appId, 'users', user.uid, 'assets'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const loaded: Asset[] = [];
@@ -774,12 +776,18 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
+  // --- Derived State & Calculations (RESTORED) ---
   const totalAssets = assets.reduce((sum, a) => sum + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0);
   const totalEarnings = assets.reduce((sum, a) => sum + convertCurrency(a.totalEarnings, a.earningsCurrency || a.currency, dashboardCurrency), 0);
   
   // Calculate Total Principal and Yield
   const totalPrincipal = totalAssets - totalEarnings;
   const totalYield = totalPrincipal > 0 ? (totalEarnings / totalPrincipal) * 100 : 0;
+
+  // Calculate Investment Duration
+  const allDates = assets.flatMap(a => a.history.map(t => t.date));
+  const minDate = allDates.length > 0 ? allDates.reduce((min, d) => d < min ? d : min, allDates[0]) : null;
+  const daysInvested = minDate ? Math.max(0, Math.floor((new Date().getTime() - new Date(minDate).getTime()) / (1000 * 60 * 60 * 24))) : 0;
 
   const chartData = [
     { name: '基金', value: assets.filter(a => a.type === AssetType.FUND).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
@@ -966,12 +974,21 @@ export default function App() {
                             <p className="text-sm font-bold leading-none">{totalEarnings > 0 ? '+' : ''}{totalEarnings.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
                         </div>
                     </div>
-                    {/* 新增：持有收益率卡片 */}
+                    {/* 持有收益率卡片 */}
                     <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
                         <div className="flex flex-col items-end">
                             <p className="text-[10px] text-gray-400 leading-none mb-0.5">持有收益率</p>
                             <p className={`text-sm font-bold leading-none ${totalYield >= 0 ? 'text-red-400' : 'text-green-400'}`}>
                                 {totalYield >= 0 ? '+' : ''}{totalYield.toFixed(2)}%
+                            </p>
+                        </div>
+                    </div>
+                    {/* 新增：投资时长卡片 */}
+                    <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
+                        <div className="flex flex-col items-end">
+                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">投资时长</p>
+                            <p className="text-sm font-bold leading-none text-white">
+                                {daysInvested} 天
                             </p>
                         </div>
                     </div>
