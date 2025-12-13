@@ -89,7 +89,6 @@ const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRe
     const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
     const year = new Date().getFullYear();
 
-    // 🔥 核心优化 Prompt：让 AI 像人类一样思考
     const prompt = `
       You are an expert personal finance assistant. Analyze this screenshot of an investment transaction.
       
@@ -567,19 +566,27 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
   const principalSymbol = getSymbol(asset.currency);
   const earningsCurrency = asset.earningsCurrency || asset.currency;
   const earningsSymbol = getSymbol(earningsCurrency);
-  const principal = asset.currentAmount - asset.totalEarnings;
-  const holdingYield = principal > 0 ? (asset.totalEarnings / principal) * 100 : 0;
   
-  // Real 7-day Yield
+  // 🔥🔥🔥 关键修复：计算本金时，先把收益转回本金货币，再相减！
+  // 1. Calculate Principal (Total Amount - Total Earnings)
+  const totalEarningsInBase = convertCurrency(asset.totalEarnings, earningsCurrency, asset.currency);
+  const principal = asset.currentAmount - totalEarningsInBase;
+  
+  // 2. Yield Calculation (Unified Currency: Asset Base Currency)
+  const holdingYield = principal > 0 ? (totalEarningsInBase / principal) * 100 : 0;
+  
+  // 3. Real 7-day Yield (Unified Currency)
   const today = new Date();
-  let sum7DayEarnings = 0;
+  let sum7DayEarningsDisplay = 0; 
   for (let i = 0; i < 7; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().split('T')[0];
-    sum7DayEarnings += (asset.dailyEarnings[dateStr] || 0);
+    sum7DayEarningsDisplay += (asset.dailyEarnings[dateStr] || 0);
   }
-  const real7DayYield = principal > 0 ? (sum7DayEarnings / principal) * (365 / 7) * 100 : 0;
+  // 🔥🔥🔥 关键修复：7日收益也必须转回本金货币！
+  const sum7DayEarningsInBase = convertCurrency(sum7DayEarningsDisplay, earningsCurrency, asset.currency);
+  const real7DayYield = principal > 0 ? (sum7DayEarningsInBase / principal) * (365 / 7) * 100 : 0;
 
   // Days held
   const getDaysHeld = () => {
