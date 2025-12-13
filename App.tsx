@@ -239,8 +239,6 @@ const findMatchingAsset = (assets: Asset[], targetName: string, targetInst: stri
     const normAssetName = normalizeString(a.productName);
 
     // 2. 核心名称匹配 (只要核心名称互相包含，就认为是同一个，忽略机构差异)
-    // 逻辑：如果 "华夏精选美元货币基金" (资产A) 和 "华夏精选美元货币基金(B Acc)" (新数据)
-    // 归一化后变成 "华夏精选美元货币基金" 和 "华夏精选美元货币基金"，完全匹配。
     if (normAssetName.includes(normTargetName) || normTargetName.includes(normAssetName)) {
         return true;
     }
@@ -665,7 +663,7 @@ const EditTransactionModal: React.FC<{ transaction: Transaction; onSave: (t: Tra
          <div className="flex justify-between items-center mb-6"><h3 className="font-bold text-lg text-gray-800">编辑记录</h3><button onClick={onClose}><X size={20} className="text-gray-400" /></button></div>
          <div className="space-y-4">
             <div><label className="text-xs text-gray-500 font-bold block mb-1.5">日期</label><input type="date" className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm" value={date} onChange={e => setDate(e.target.value)} /></div>
-            <div><label className="text-xs text-gray-500 font-bold block mb-1.5">金额</label><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm font-bold" value={amountStr} onChange={e => setAmountStr(e.target.value)} /></div>
+            <div><label className="text-xs text-gray-500 font-bold block mb-1.5">金額</label><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm font-bold" value={amountStr} onChange={e => setAmountStr(e.target.value)} /></div>
             <div><label className="text-xs text-gray-500 font-bold block mb-1.5">备注</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm" value={description} onChange={e => setDescription(e.target.value)} /></div>
          </div>
          <div className="flex gap-3 mt-8"><button onClick={onDelete} className="flex-1 py-2.5 bg-red-50 text-red-500 text-sm font-bold rounded-lg hover:bg-red-100 transition">删除</button><button onClick={handleSave} className="flex-1 py-2.5 bg-gray-900 text-white text-sm font-bold rounded-lg hover:bg-black transition">保存</button></div>
@@ -790,8 +788,15 @@ export default function App() {
     try {
       const records = await Promise.all(Array.from(e.target.files).map(async f => {
         const reader = new FileReader();
-        return new Promise<AIAssetRecord[]>((resolve) => {
-          reader.onload = async () => resolve(await analyzeEarningsScreenshot(reader.result as string));
+        return new Promise<AIAssetRecord[]>((resolve, reject) => { // ADDED reject
+          reader.onload = async () => {
+              try {
+                  resolve(await analyzeEarningsScreenshot(reader.result as string));
+              } catch (e) {
+                  reject(e); // CATCH async error
+              }
+          };
+          reader.onerror = (e) => reject(e);
           reader.readAsDataURL(f);
         });
       }));
@@ -848,7 +853,10 @@ export default function App() {
          }
       }
       setLastProcessedCount(count);
-    } catch (e) { console.error(e); alert("处理失败"); }
+    } catch (e) { 
+        console.error(e); 
+        alert("识别过程中出现错误，请检查网络或图片内容"); 
+    }
     finally { setIsProcessingAI(false); if(fileInputRef.current) fileInputRef.current.value = ''; }
   };
 
