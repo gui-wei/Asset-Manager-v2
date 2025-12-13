@@ -4,7 +4,7 @@ import {
   Plus, ChevronDown, HelpCircle, History, Calendar, Wallet, 
   Pencil, X, TrendingUp, RefreshCw, Camera, Trash2, Settings, 
   AlertTriangle, Sparkles, ArrowRightLeft, Loader2, UserCircle, LogOut, 
-  UploadCloud, CheckCircle2, Mail, Lock, ArrowRight
+  UploadCloud, CheckCircle2, Mail, Lock, ArrowRight, Percent
 } from 'lucide-react';
 
 // Firebase Imports
@@ -73,6 +73,7 @@ const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promi
   });
 };
 
+// 读取环境变量中的 Key
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
 
 const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRecord[]> => {
@@ -88,6 +89,7 @@ const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRe
     const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
     const year = new Date().getFullYear();
 
+    // 🔥 核心优化 Prompt：让 AI 像人类一样思考，而不是死板匹配
     const prompt = `
       You are an expert personal finance assistant. Analyze this screenshot of an investment transaction.
       
@@ -156,7 +158,9 @@ const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRe
   }
 };
 
-// --- FIREBASE CONFIGURATION ---
+/**
+ * --- FIREBASE CONFIGURATION ---
+ */
 // @ts-ignore
 const firebaseConfig = {
   apiKey: "AIzaSyCcWjG9efLujQ2dc4Aunn4TQhOsWfL0K5I",
@@ -220,18 +224,14 @@ const RATES: Record<Currency, number> = {
 
 const getSymbol = (c: Currency) => c === 'USD' ? '$' : c === 'HKD' ? 'HK$' : '¥';
 
-// 核心汇率转换函数：将金额从 from 币种转换到 to 币种
 const convertCurrency = (amount: number, from: Currency, to: Currency) => {
   if (from === to) return amount;
-  // 先转成人民币(基准)，再转成目标币种
-  // Example: 100 USD -> 720 CNY
   const amountInCNY = amount * RATES[from];
-  // Example: 720 CNY -> ? HKD (720 / 0.92)
   return amountInCNY / RATES[to];
 };
 
 /**
- * --- UTILS ---
+ * --- UTILS (LOGIC RESTORED TO GENERAL) ---
  */
 
 const normalizeString = (str: string) => {
@@ -261,34 +261,27 @@ const getUniqueProductNames = (assets: Asset[]): string[] => {
 
 const consolidateAssets = (rawAssets: Asset[]): Asset[] => {
   return rawAssets.map(asset => {
-    let totalPrincipalBase = 0; // 本金（已转换为资产主币种）
-    let totalEarningsBase = 0;  // 收益（已转换为资产主币种）
-    let totalEarningsDisplay = 0; // 收益（保持收益币种，仅用于显示数值）
+    let totalPrincipalBase = 0; 
+    let totalEarningsBase = 0;
+    let totalEarningsDisplay = 0; 
     const dailyMap: Record<string, number> = {}; 
 
     const sortedHistory = [...asset.history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     sortedHistory.forEach(tx => {
-      // 每一笔交易的币种
       const txCurrency = tx.currency || (tx.type === 'deposit' ? asset.currency : (asset.earningsCurrency || asset.currency));
 
       if (tx.type === 'deposit') {
-        // 存入：必须统一转换为资产的【主币种】(asset.currency) 才能累加本金
         totalPrincipalBase += convertCurrency(tx.amount, txCurrency, asset.currency);
       } else if (tx.type === 'earning') {
-        // 收益：
-        // 1. 用于显示的数值（累加到 asset.earningsCurrency）
         const earningForDisplay = convertCurrency(tx.amount, txCurrency, asset.earningsCurrency || asset.currency);
         totalEarningsDisplay += earningForDisplay;
         dailyMap[tx.date] = (dailyMap[tx.date] || 0) + earningForDisplay;
-
-        // 2. 用于计算总资产的数值（累加到 asset.currency）
         const earningForBase = convertCurrency(tx.amount, txCurrency, asset.currency);
         totalEarningsBase += earningForBase;
       }
     });
     
-    // 总资产 = 统一换算后的本金 + 统一换算后的收益
     const currentAmount = totalPrincipalBase + totalEarningsBase;
 
     return {
@@ -576,27 +569,22 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
   const earningsSymbol = getSymbol(earningsCurrency);
   
   // 1. Calculate Principal (Total Amount - Total Earnings)
-  // 注意：这里的 totalEarnings 是【显示用】的累计值（可能是 USD），而 currentAmount 是【基准货币】的累计值（可能是 CNY）
-  // 必须统一单位：先把显示的收益 (earningsCurrency) 转回基准 (asset.currency)
   const totalEarningsInBase = convertCurrency(asset.totalEarnings, earningsCurrency, asset.currency);
   const principal = asset.currentAmount - totalEarningsInBase;
   
   // 2. Yield Calculation (Unified Currency: Asset Base Currency)
-  // 收益率 = (总收益_基准 / 总本金_基准) * 100
   const holdingYield = principal > 0 ? (totalEarningsInBase / principal) * 100 : 0;
   
   // 3. Real 7-day Yield (Unified Currency)
   const today = new Date();
-  let sum7DayEarningsDisplay = 0; // 这是显示币种（例如 CNY）的收益总和
+  let sum7DayEarningsDisplay = 0; 
   for (let i = 0; i < 7; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().split('T')[0];
     sum7DayEarningsDisplay += (asset.dailyEarnings[dateStr] || 0);
   }
-  // 同样，先把收益转回基准货币（例如 USD）
   const sum7DayEarningsInBase = convertCurrency(sum7DayEarningsDisplay, earningsCurrency, asset.currency);
-  
   const real7DayYield = principal > 0 ? (sum7DayEarningsInBase / principal) * (365 / 7) * 100 : 0;
 
   // Days held
@@ -788,6 +776,10 @@ export default function App() {
 
   const totalAssets = assets.reduce((sum, a) => sum + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0);
   const totalEarnings = assets.reduce((sum, a) => sum + convertCurrency(a.totalEarnings, a.earningsCurrency || a.currency, dashboardCurrency), 0);
+  
+  // Calculate Total Principal and Yield
+  const totalPrincipal = totalAssets - totalEarnings;
+  const totalYield = totalPrincipal > 0 ? (totalEarnings / totalPrincipal) * 100 : 0;
 
   const chartData = [
     { name: '基金', value: assets.filter(a => a.type === AssetType.FUND).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
@@ -965,7 +957,25 @@ export default function App() {
               <div>
                  <div className="flex items-center gap-2 mb-1"><p className="text-gray-400 text-xs font-medium tracking-wide">总资产估值</p><button onClick={() => setDashboardCurrency(curr => curr === 'CNY' ? 'USD' : curr === 'USD' ? 'HKD' : 'CNY')} className="text-[10px] font-bold bg-white/10 px-1.5 py-0.5 rounded text-gray-300 hover:bg-white/20 transition flex items-center gap-0.5">{dashboardCurrency} <RefreshCw size={8} /></button></div>
                  <h2 className="text-3xl sm:text-4xl font-bold mb-4 font-mono tracking-tight animate-fadeIn">{dashboardCurrency === 'USD' ? '$' : dashboardCurrency === 'HKD' ? 'HK$' : '¥'} {totalAssets.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</h2>
-                 <div className="flex items-center gap-2"><div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5"><TrendingUp size={14} className="text-red-400" /><div><p className="text-[10px] text-gray-400 leading-none mb-0.5">累计收益 ({dashboardCurrency})</p><p className="text-sm font-bold leading-none">{totalEarnings > 0 ? '+' : ''}{totalEarnings.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p></div></div></div>
+                 <div className="flex items-center gap-2">
+                    {/* 累计收益卡片 */}
+                    <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
+                        <TrendingUp size={14} className="text-red-400" />
+                        <div>
+                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">累计收益 ({dashboardCurrency})</p>
+                            <p className="text-sm font-bold leading-none">{totalEarnings > 0 ? '+' : ''}{totalEarnings.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                        </div>
+                    </div>
+                    {/* 新增：持有收益率卡片 */}
+                    <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
+                        <div className="flex flex-col items-end">
+                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">持有收益率</p>
+                            <p className={`text-sm font-bold leading-none ${totalYield >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                                {totalYield >= 0 ? '+' : ''}{totalYield.toFixed(2)}%
+                            </p>
+                        </div>
+                    </div>
+                 </div>
               </div>
               <div className="w-24 h-24 sm:w-32 sm:h-32 relative"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={chartData} innerRadius="60%" outerRadius="100%" paddingAngle={5} dataKey="value" stroke="none">{chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie></PieChart></ResponsiveContainer></div>
            </div>
