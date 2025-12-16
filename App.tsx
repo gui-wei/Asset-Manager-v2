@@ -38,7 +38,7 @@ export interface AIAssetRecord {
   productName?: string;
   institution?: string;
   currency?: 'CNY' | 'USD' | 'HKD';
-  assetType?: 'Fund' | 'Gold' | 'Other';
+  assetType?: 'Fund' | 'Stock' | 'Gold' | 'Other'; // ✅ 更新类型定义
 }
 
 const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promise<string> => {
@@ -116,8 +116,11 @@ const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRe
       4. **Type**:
          - **deposit**: Capital inflow (Buy, Purchase, Subscription, 已交收).
          - **earning**: Income (Profit, Dividend, Interest, 收益).
+         
+      5. **Asset Type**:
+         - Infer Fund/Stock/Gold/Other based on keywords (e.g., "Stock", "Share", "Equities", "Gold", "ETF", "Bond").
 
-      OUTPUT JSON ONLY: { "records": [ { "productName": "...", "institution": "...", "amount": number, "date": "...", "type": "deposit"|"earning", "currency": "CNY"|"USD"|"HKD", "assetType": "Fund"|"Gold"|"Other" } ] }
+      OUTPUT JSON ONLY: { "records": [ { "productName": "...", "institution": "...", "amount": number, "date": "...", "type": "deposit"|"earning", "currency": "CNY"|"USD"|"HKD", "assetType": "Fund"|"Stock"|"Gold"|"Other" } ] }
     `;
 
     const response = await fetch(
@@ -181,11 +184,12 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
  * --- TYPES & CONSTANTS ---
  */
 
-const COLORS = ['#3b82f6', '#fbbf24', '#a855f7', '#f87171']; 
+// ✅ 更新颜色顺序：蓝(基)、红(股)、黄(金)、紫(其)
+const COLORS = ['#3b82f6', '#ef4444', '#fbbf24', '#a855f7']; 
 
 export enum AssetType {
   FUND = 'Fund',
-  STOCK = 'Stock', // 新增这一行
+  STOCK = 'Stock', // ✅ 新增股票
   GOLD = 'Gold',
   OTHER = 'Other'
 }
@@ -602,13 +606,15 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
       <div className="transition-all duration-300">
         <div onClick={() => setIsOpen(!isOpen)} className="p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition active:bg-gray-100">
           <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0 ${asset.type === AssetType.FUND ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 
-                                                                                                                                     asset.type === AssetType.STOCK ? 'bg-gradient-to-br from-red-500 to-red-700' : // 新增：股票用红色渐变 
-                                                                                                                                     asset.type === AssetType.GOLD ? 'bg-gradient-to-br from-yellow-400 to-yellow-600' : 
-                                                                                                                                     'bg-gradient-to-br from-purple-400 to-purple-600'}`}>
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0 ${
+                asset.type === AssetType.FUND ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 
+                asset.type === AssetType.STOCK ? 'bg-gradient-to-br from-red-500 to-red-700' : // ✅ 股票红色
+                asset.type === AssetType.GOLD ? 'bg-gradient-to-br from-yellow-400 to-yellow-600' : 
+                'bg-gradient-to-br from-purple-400 to-purple-600'
+            }`}>
               {asset.type === AssetType.FUND ? '基' : 
-              asset.type === AssetType.STOCK ? '股' : 
-              asset.type === AssetType.GOLD ? '金' : '其'}
+               asset.type === AssetType.STOCK ? '股' : // ✅ 股票文字
+               asset.type === AssetType.GOLD ? '金' : '其'}
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="font-bold text-gray-800 text-base break-words leading-tight">{asset.productName}</h3>
@@ -701,7 +707,8 @@ const EditAssetInfoModal: React.FC<{ asset: Asset; onSave: (asset: Asset) => voi
           <div><label className="block text-gray-500 text-xs font-bold mb-1.5">投资渠道</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={formData.institution} onChange={(e) => setFormData({ ...formData, institution: e.target.value })} /></div>
           <div><label className="block text-gray-500 text-xs font-bold mb-1.5">产品名称</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={formData.productName} onChange={(e) => setFormData({ ...formData, productName: e.target.value })} /></div>
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-gray-500 text-xs font-bold mb-1.5">资产类型</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none transition-all" value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value as AssetType })}><option value={AssetType.FUND}>基金</option><option value={AssetType.GOLD}>黄金</option><option value={AssetType.OTHER}>其他</option></select></div>
+            {/* ✅ 更新选项，加入股票 */}
+            <div><label className="block text-gray-500 text-xs font-bold mb-1.5">资产类型</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none transition-all" value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value as AssetType})}><option value={AssetType.FUND}>基金</option><option value={AssetType.STOCK}>股票</option><option value={AssetType.GOLD}>黄金</option><option value={AssetType.OTHER}>其他</option></select></div>
             <div><label className="block text-gray-500 text-xs font-bold mb-1.5">本金货币</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none font-bold transition-all" value={formData.currency} onChange={(e) => setFormData({ ...formData, currency: e.target.value as Currency })}><option value="CNY">CNY (人民币)</option><option value="USD">USD (美元)</option><option value="HKD">HKD (港币)</option></select></div>
           </div>
           <div><label className="block text-gray-500 text-xs font-bold mb-1.5 flex items-center gap-2">收益货币</label><div className="relative"><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none font-bold transition-all" value={formData.earningsCurrency} onChange={(e) => setFormData({ ...formData, earningsCurrency: e.target.value as Currency })}><option value="CNY">CNY (人民币)</option><option value="USD">USD (美元)</option><option value="HKD">HKD (港币)</option></select><ArrowRightLeft size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" /></div></div>
@@ -811,9 +818,10 @@ export default function App() {
       annualizedYield = (Math.pow(growthRatio, yearRatio) - 1) * 100;
   }
 
+  // ✅ 更新图表数据逻辑，加入股票
   const chartData = [
     { name: '基金', value: assets.filter(a => a.type === AssetType.FUND).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
-    { name: '股票', value: assets.filter(a => a.type === AssetType.STOCK).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) }, // 新增这一行
+    { name: '股票', value: assets.filter(a => a.type === AssetType.STOCK).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
     { name: '黄金', value: assets.filter(a => a.type === AssetType.GOLD).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
     { name: '其他', value: assets.filter(a => a.type === AssetType.OTHER).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
   ].filter(d => d.value > 0);
@@ -1048,7 +1056,9 @@ export default function App() {
       <div className="fixed bottom-8 left-0 right-0 flex justify-center z-40 pointer-events-none"><div className="pointer-events-auto bg-gray-900 text-white rounded-full shadow-2xl flex items-center p-1.5 px-6 gap-0 backdrop-blur-xl bg-opacity-95 hover:scale-105 transition duration-200"><button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70"><Plus size={18} className="text-blue-400" /> <span>记一笔</span></button><div className="w-px h-5 bg-gray-700 mx-1"></div><button onClick={() => { setScanTargetId('auto'); setManualInstitution(''); setManualCurrency(''); setShowScanModal(true); setLastProcessedCount(0); }} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70"><Camera size={18} className="text-blue-400" /> <span>AI 识别</span></button></div></div>
 
       <AIScanModal isOpen={showScanModal} onClose={() => !isProcessingAI && setShowScanModal(false)} onUpload={() => fileInputRef.current?.click()} isProcessing={isProcessingAI} assets={assets} targetAssetId={scanTargetId} setTargetAssetId={setScanTargetId} manualCurrency={manualCurrency} setManualCurrency={setManualCurrency} manualInstitution={manualInstitution} setManualInstitution={setManualInstitution} lastProcessedCount={lastProcessedCount} />
-      {showAddModal && <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn"><div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-slideUp"><h2 className="text-xl font-bold mb-6 text-gray-800 text-center">记录新资产</h2><div className="space-y-4"><SmartInput label="投资渠道" placeholder="例如：支付宝" value={newAsset.institution} onChange={(v) => setNewAsset({...newAsset, institution: v})} suggestions={['支付宝', '微信理财通', '招商银行', '工商银行']} /><SmartInput label="产品名称" placeholder="例如：易方达蓝筹" value={newAsset.productName} onChange={(v) => setNewAsset({...newAsset, productName: v})} suggestions={getUniqueProductNames(assets)} /><div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-500 text-xs font-bold mb-1.5">记录日期</label><input type="date" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" value={newAsset.date} onChange={(e) => setNewAsset({...newAsset, date: e.target.value})} /></div><div><label className="block text-gray-500 text-xs font-bold mb-1.5">资产类型</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm appearance-none" value={newAsset.type} onChange={(e) => setNewAsset({...newAsset, type: e.target.value as AssetType})}><option value={AssetType.FUND}>基金</option><option value={AssetType.GOLD}>黄金</option><option value={AssetType.OTHER}>其他</option></select></div></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-500 text-xs font-bold mb-1.5">货币种类</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm appearance-none font-bold" value={newAsset.currency} onChange={(e) => setNewAsset({...newAsset, currency: e.target.value as Currency})}><option value="CNY">CNY</option><option value="USD">USD</option><option value="HKD">HKD</option></select></div><div><label className="block text-gray-500 text-xs font-bold mb-1.5">金额</label><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-lg font-bold" placeholder="0.00" value={newAsset.amount} onChange={(e) => setNewAsset({...newAsset, amount: e.target.value})} /></div></div><div className="flex gap-4"><div className="flex-1"><label className="block text-gray-500 text-xs font-bold mb-1.5">年化 (%)</label><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" placeholder="2.5" value={newAsset.yield} onChange={(e) => setNewAsset({...newAsset, yield: e.target.value})} /></div><div className="flex-[2]"><label className="block text-gray-500 text-xs font-bold mb-1.5">备注</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" placeholder="选填" value={newAsset.remark} onChange={(e) => setNewAsset({...newAsset, remark: e.target.value})} /></div></div><div className="flex gap-3 mt-8"><button onClick={() => setShowAddModal(false)} className="flex-1 py-3.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-sm">取消</button><button onClick={handleAddAsset} className="flex-1 py-3.5 rounded-xl bg-gray-900 text-white font-bold text-sm shadow-lg">确认</button></div></div></div></div>}
+      {showAddModal && <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn"><div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-slideUp"><h2 className="text-xl font-bold mb-6 text-gray-800 text-center">记录新资产</h2><div className="space-y-4"><SmartInput label="投资渠道" placeholder="例如：支付宝" value={newAsset.institution} onChange={(v) => setNewAsset({...newAsset, institution: v})} suggestions={['支付宝', '微信理财通', '招商银行', '工商银行']} /><SmartInput label="产品名称" placeholder="例如：易方达蓝筹" value={newAsset.productName} onChange={(v) => setNewAsset({...newAsset, productName: v})} suggestions={getUniqueProductNames(assets)} /><div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-500 text-xs font-bold mb-1.5">记录日期</label><input type="date" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" value={newAsset.date} onChange={(e) => setNewAsset({...newAsset, date: e.target.value})} /></div>
+      {/* ✅ 更新选项，加入股票 */}
+      <div><label className="block text-gray-500 text-xs font-bold mb-1.5">资产类型</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm appearance-none" value={newAsset.type} onChange={(e) => setNewAsset({...newAsset, type: e.target.value as AssetType})}><option value={AssetType.FUND}>基金</option><option value={AssetType.STOCK}>股票</option><option value={AssetType.GOLD}>黄金</option><option value={AssetType.OTHER}>其他</option></select></div></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-500 text-xs font-bold mb-1.5">货币种类</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm appearance-none font-bold" value={newAsset.currency} onChange={(e) => setNewAsset({...newAsset, currency: e.target.value as Currency})}><option value="CNY">CNY</option><option value="USD">USD</option><option value="HKD">HKD</option></select></div><div><label className="block text-gray-500 text-xs font-bold mb-1.5">金额</label><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-lg font-bold" placeholder="0.00" value={newAsset.amount} onChange={(e) => setNewAsset({...newAsset, amount: e.target.value})} /></div></div><div className="flex gap-4"><div className="flex-1"><label className="block text-gray-500 text-xs font-bold mb-1.5">年化 (%)</label><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" placeholder="2.5" value={newAsset.yield} onChange={(e) => setNewAsset({...newAsset, yield: e.target.value})} /></div><div className="flex-[2]"><label className="block text-gray-500 text-xs font-bold mb-1.5">备注</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" placeholder="选填" value={newAsset.remark} onChange={(e) => setNewAsset({...newAsset, remark: e.target.value})} /></div></div><div className="flex gap-3 mt-8"><button onClick={() => setShowAddModal(false)} className="flex-1 py-3.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-sm">取消</button><button onClick={handleAddAsset} className="flex-1 py-3.5 rounded-xl bg-gray-900 text-white font-bold text-sm shadow-lg">确认</button></div></div></div></div>}
       {editingAssetInfo && <EditAssetInfoModal asset={editingAssetInfo} onSave={handleSaveAssetInfo} onClose={() => setEditingAssetInfo(null)} />}
       {editingTransaction && <EditTransactionModal transaction={editingTransaction.transaction} onSave={handleUpdateTransaction} onDelete={() => handleDeleteTransaction(editingTransaction.transaction.id)} onClose={() => setEditingTransaction(null)} />}
       {confirmDeleteAssetId && <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn"><div className="bg-white w-full max-w-xs rounded-2xl p-6 shadow-2xl"><div className="flex flex-col items-center text-center mb-6"><div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4"><AlertTriangle size={24} className="text-red-500" /></div><h3 className="text-lg font-bold text-gray-800">确认删除该资产？</h3><p className="text-sm text-gray-500 mt-2">删除后，该资产的所有历史记录和收益明细将无法恢复。</p></div><div className="flex gap-3"><button onClick={() => setConfirmDeleteAssetId(null)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm">取消</button><button onClick={executeDeleteAsset} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold text-sm">确认删除</button></div></div></div>}
