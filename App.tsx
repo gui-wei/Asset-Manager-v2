@@ -38,7 +38,7 @@ export interface AIAssetRecord {
   productName?: string;
   institution?: string;
   currency?: 'CNY' | 'USD' | 'HKD';
-  assetType?: 'Fund' | 'Stock' | 'Gold' | 'Other'; // ✅ 更新类型定义
+  assetType?: 'Fund' | 'Stock' | 'Gold' | 'Other';
 }
 
 const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promise<string> => {
@@ -184,12 +184,11 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
  * --- TYPES & CONSTANTS ---
  */
 
-// ✅ 更新颜色顺序：蓝(基)、红(股)、黄(金)、紫(其)
 const COLORS = ['#3b82f6', '#ef4444', '#fbbf24', '#a855f7']; 
 
 export enum AssetType {
   FUND = 'Fund',
-  STOCK = 'Stock', // ✅ 新增股票
+  STOCK = 'Stock', 
   GOLD = 'Gold',
   OTHER = 'Other'
 }
@@ -496,13 +495,26 @@ const EarningsCalendar: React.FC<{ asset: Asset; onClose: () => void; }> = ({ as
                 <div key={day} className="flex flex-col items-center justify-start pt-1 h-14 rounded-lg bg-gray-50 border border-gray-100 relative overflow-hidden group hover:border-blue-200 transition-colors">
                   <span className="text-[10px] font-medium text-gray-400 mb-0.5 group-hover:text-blue-500">{day}</span>
                   {earning !== 0 && (
-                     // 🔥 关键修改：toFixed(2) 保留两位小数，tracking-tighter 防止文字过长换行
-                     <span className={`text-[9px] font-bold leading-tight tracking-tighter ${earning > 0 ? 'text-red-500' : 'text-green-600'}`}>{earning > 0 ? '+' : ''}{earningsSymbol}{Math.abs(earning).toFixed(2)}</span>
+                     // 🔥 日历部分也保持一致：红色正收益，绿色负收益，无+号
+                     <span className={`text-[9px] font-bold leading-tight tracking-tighter ${earning > 0 ? 'text-red-500' : 'text-green-600'}`}>{earning > 0 ? '' : ''}{Math.abs(earning).toFixed(2)}</span>
                   )}
-                  {deposits > 0 && <span className="text-[9px] font-bold text-blue-500 leading-tight tracking-tighter">+{principalSymbol}{deposits.toLocaleString(undefined, {maximumFractionDigits:0})}</span>}
+                  {/* 🔥 存入显示为蓝色，无+号 */}
+                  {deposits > 0 && <span className="text-[9px] font-bold text-blue-500 leading-tight tracking-tighter">{deposits.toLocaleString(undefined, {maximumFractionDigits:0})}</span>}
                 </div>
               );
             })}
+          </div>
+          
+          <div className="mt-4 flex gap-4 justify-center text-xs text-gray-500 pt-3 border-t border-gray-100">
+             <div className="flex items-center gap-1.5">
+               <span className="w-2 h-2 rounded-full bg-red-500"></span> 收益
+             </div>
+             <div className="flex items-center gap-1.5">
+               <span className="w-2 h-2 rounded-full bg-green-600"></span> 亏损
+             </div>
+             <div className="flex items-center gap-1.5">
+               <span className="w-2 h-2 rounded-full bg-blue-500"></span> 存入
+             </div>
           </div>
         </div>
       </div>
@@ -608,12 +620,12 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
           <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
             <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0 ${
                 asset.type === AssetType.FUND ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 
-                asset.type === AssetType.STOCK ? 'bg-gradient-to-br from-red-500 to-red-700' : // ✅ 股票红色
+                asset.type === AssetType.STOCK ? 'bg-gradient-to-br from-red-500 to-red-700' : 
                 asset.type === AssetType.GOLD ? 'bg-gradient-to-br from-yellow-400 to-yellow-600' : 
                 'bg-gradient-to-br from-purple-400 to-purple-600'
             }`}>
               {asset.type === AssetType.FUND ? '基' : 
-               asset.type === AssetType.STOCK ? '股' : // ✅ 股票文字
+               asset.type === AssetType.STOCK ? '股' : 
                asset.type === AssetType.GOLD ? '金' : '其'}
             </div>
             <div className="min-w-0 flex-1">
@@ -645,15 +657,35 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
               {asset.history.length === 0 ? <p className="text-center text-xs text-gray-400 py-4">暂无记录</p> : asset.history.map(record => {
                   const txCurrency = record.currency || (record.type === 'deposit' ? asset.currency : earningsCurrency);
                   const txSymbol = getSymbol(txCurrency);
+                  // 🔥 核心修改：统一列表中的颜色逻辑，移除符号
+                  // 1. 如果是存入 (deposit)：蓝色
+                  // 2. 如果是收益 (earning) 且 > 0：红色
+                  // 3. 如果是收益 (earning) 且 <= 0：绿色
+                  const isDeposit = record.type === 'deposit';
+                  const isPositiveEarning = record.type === 'earning' && record.amount > 0;
+                  
+                  // 根据条件计算颜色 Class
+                  const textColorClass = isDeposit 
+                    ? 'text-blue-500' 
+                    : (isPositiveEarning ? 'text-red-500' : 'text-green-600');
+                  
+                  // 圆点颜色也需要同步
+                  const dotColorClass = isDeposit
+                    ? 'bg-blue-500'
+                    : (isPositiveEarning ? 'bg-red-500' : 'bg-green-600');
+
                   return (
                     <div key={record.id} className="flex justify-between items-center text-sm bg-white p-3 rounded-lg shadow-sm border border-gray-100 group">
                       <div className="flex items-center gap-3">
-                        <div className={`w-1.5 h-1.5 rounded-full ${record.type === 'deposit' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <div className={`w-1.5 h-1.5 rounded-full ${dotColorClass}`}></div>
                         <span className="text-gray-400 text-xs">{record.date}</span>
                         <span className="text-gray-700 font-medium truncate max-w-[80px] sm:max-w-[120px]">{record.description}</span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className={`font-mono font-bold ${record.type === 'earning' ? 'text-red-500' : 'text-green-600'}`}>{record.type === 'earning' ? '+' : ''} {txSymbol}{record.amount}</span>
+                        {/* 金额显示：只保留货币符号，去掉+号，使用 Math.abs() 显示绝对值 */}
+                        <span className={`font-mono font-bold ${textColorClass}`}>
+                            {txSymbol}{Math.abs(record.amount).toLocaleString()}
+                        </span>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button onClick={(e) => { e.stopPropagation(); onEditTransaction(record); }} className="p-1.5 text-gray-300 hover:text-blue-500 hover:bg-blue-50 rounded transition"><Pencil size={14} /></button>
                             <button onClick={(e) => { e.stopPropagation(); onDeleteTransaction(record.id); }} className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition"><Trash2 size={14} /></button>
