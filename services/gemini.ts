@@ -7,7 +7,7 @@ export interface AIAssetRecord {
   productName?: string;
   institution?: string;
   currency?: 'CNY' | 'USD' | 'HKD';
-  assetType?: 'Fund' | 'Stock' | 'Gold' | 'Other'; // ✅ 更新类型定义
+  assetType?: 'Fund' | 'Stock' | 'Gold' | 'Other';
 }
 
 const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promise<string> => {
@@ -45,7 +45,6 @@ const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promi
 export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRecord[]> => {
   if (!base64Image) return [];
 
-  // ✅ 生产环境变更：使用标准的 Vite 环境变量
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   
   if (!apiKey) {
@@ -59,28 +58,43 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
     const cleanBase64 = parts.length > 1 ? parts[1] : compressedDataUrl;
     
     const todayStr = new Date().toISOString().split('T')[0];
-    const yesterdayDate = new Date(Date.now() - 86400000);
-    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
     const year = new Date().getFullYear();
 
-    // 优化后的 Prompt，支持中英文混合识别和更准确的归类
+    // 🔥 核心优化：针对“收益日历”和“列表视图”的双重识别逻辑
     const prompt = `
-      Analyze this screenshot of an investment/banking app (e.g., Alipay, WeChat Wealth, Bank Apps).
-      YOUR GOAL: Extract transaction data and identifying product details to group records correctly.
+      You are an expert financial data assistant. Analyze this screenshot from a Chinese investment app (e.g., Tonghuashun, Alipay).
+      
+      **GOAL**: Extract transaction records accurately.
 
-      KEY EXTRACTION RULES:
-      1. **Product Name** (CRITICAL): Extract FULL product name. IGNORE codes like "(001234)".
-      2. **Institution**: Standardize names (Alipay, WeChat, ICBC, etc.).
-      3. **Transaction Type**:
-         - **deposit**: "Buy", "Purchase", "买入", "申购", "确认成功", "交易成功".
-         - **earning**: "Income", "Profit", "收益", "昨收", "+xx.xx".
-      4. **Date**: YYYY-MM-DD. Handle "Yesterday"=${yesterdayStr}, "Today"=${todayStr}. Default year=${year}.
-      5. **Asset Type**: Infer Fund/Stock/Gold/Other based on keywords (e.g., "Stock", "Share", "Equities", "Gold", "ETF", "Bond").
+      **SCENARIO A: EARNINGS CALENDAR (收益日历 Grid View)**
+      If the image looks like a monthly calendar grid with numbers in cells:
+      1. **Header Date**: Find the Year and Month at the top (e.g., "2024年11月" or "2023.06"). Use this to construct full dates.
+      2. **Grid Iteration**: Go through every day-cell in the grid.
+      3. **Value & Sign Logic (CRITICAL)**:
+         - **PROFIT (Positive)**: Cell has Red/Orange/Pink background OR text color OR a "+" sign. -> Extract as POSITIVE earning.
+         - **LOSS (Negative)**: Cell has Green/Blue background OR text color OR a "-" sign. -> Extract as NEGATIVE earning (e.g., -1250.00).
+         - **Ignore**: Cells marked "休" (Holiday), "0", or empty cells.
+      4. **Record Construction**:
+         - Date: YYYY-MM-DD (Combine header year/month + cell day).
+         - Amount: The number in the cell.
+         - Type: "earning".
+         - Institution: "Tonghuashun" (or infer from UI).
+         - Product Name: "股票账户" (Stock Account) or specific stock name if visible in header.
+         - Asset Type: "Stock".
 
-      OUTPUT JSON ONLY: { "records": [ { "productName": "...", "institution": "...", "amount": number, "date": "...", "type": "...", "currency": "...", "assetType": "..." } ] }
+      **SCENARIO B: TRANSACTION LIST (List View)**
+      If the image is a standard list of rows:
+      1. **Product Name**: Extract full name, remove codes like (001234).
+      2. **Institution**: Standardize (Alipay, WeChat, etc.).
+      3. **Type**: 
+         - "deposit" for keywords: Buy, Purchase, 买入, 申购.
+         - "earning" for keywords: Income, Profit, 收益, +xx.xx.
+      4. **Asset Type**: Infer Fund/Stock/Gold based on name.
+
+      **OUTPUT JSON ONLY**: 
+      { "records": [ { "productName": "...", "institution": "...", "amount": number, "date": "YYYY-MM-DD", "type": "deposit"|"earning", "currency": "CNY"|"USD"|"HKD", "assetType": "Fund"|"Stock"|"Gold"|"Other" } ] }
     `;
 
-    // 使用 fetch 直接调用 REST API，避免 SDK 版本兼容性问题，且更轻量
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
