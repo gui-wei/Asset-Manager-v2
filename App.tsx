@@ -185,6 +185,7 @@ const COLORS = ['#3b82f6', '#fbbf24', '#a855f7', '#f87171'];
 
 export enum AssetType {
   FUND = 'Fund',
+  STOCK = 'Stock', // 新增这一行
   GOLD = 'Gold',
   OTHER = 'Other'
 }
@@ -601,8 +602,13 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
       <div className="transition-all duration-300">
         <div onClick={() => setIsOpen(!isOpen)} className="p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition active:bg-gray-100">
           <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0 ${asset.type === AssetType.FUND ? 'bg-gradient-to-br from-blue-400 to-blue-600' : asset.type === AssetType.GOLD ? 'bg-gradient-to-br from-yellow-400 to-yellow-600' : 'bg-gradient-to-br from-purple-400 to-purple-600'}`}>
-              {asset.type === AssetType.FUND ? '基' : asset.type === AssetType.GOLD ? '金' : '其'}
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0 ${asset.type === AssetType.FUND ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 
+                                                                                                                                     asset.type === AssetType.STOCK ? 'bg-gradient-to-br from-red-500 to-red-700' : // 新增：股票用红色渐变 
+                                                                                                                                     asset.type === AssetType.GOLD ? 'bg-gradient-to-br from-yellow-400 to-yellow-600' : 
+                                                                                                                                     'bg-gradient-to-br from-purple-400 to-purple-600'}`}>
+              {asset.type === AssetType.FUND ? '基' : 
+              asset.type === AssetType.STOCK ? '股' : 
+              asset.type === AssetType.GOLD ? '金' : '其'}
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="font-bold text-gray-800 text-base break-words leading-tight">{asset.productName}</h3>
