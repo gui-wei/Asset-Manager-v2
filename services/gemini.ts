@@ -7,7 +7,7 @@ export interface AIAssetRecord {
   productName?: string;
   institution?: string;
   currency?: 'CNY' | 'USD' | 'HKD';
-  assetType?: 'Fund' | 'Gold' | 'Other';
+  assetType?: 'Fund' | 'Stock' | 'Gold' | 'Other'; // ✅ 更新类型定义
 }
 
 const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promise<string> => {
@@ -75,7 +75,7 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
          - **deposit**: "Buy", "Purchase", "买入", "申购", "确认成功", "交易成功".
          - **earning**: "Income", "Profit", "收益", "昨收", "+xx.xx".
       4. **Date**: YYYY-MM-DD. Handle "Yesterday"=${yesterdayStr}, "Today"=${todayStr}. Default year=${year}.
-      5. **Asset Type**: Infer Fund/Gold/Other based on keywords (e.g., "Gold", "ETF", "Bond").
+      5. **Asset Type**: Infer Fund/Stock/Gold/Other based on keywords (e.g., "Stock", "Share", "Equities", "Gold", "ETF", "Bond").
 
       OUTPUT JSON ONLY: { "records": [ { "productName": "...", "institution": "...", "amount": number, "date": "...", "type": "...", "currency": "...", "assetType": "..." } ] }
     `;
