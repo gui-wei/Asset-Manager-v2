@@ -1,5 +1,6 @@
 export enum AssetType {
   FUND = 'Fund',
+  STOCK = 'Stock', // 新增这一行
   GOLD = 'Gold',
   OTHER = 'Other'
 }
