@@ -519,8 +519,10 @@ const EarningsCalendar: React.FC<{ asset: Asset; onClose: () => void; }> = ({ as
 const AIScanModal: React.FC<{
   isOpen: boolean; onClose: () => void; onUpload: () => void; isProcessing: boolean; assets: Asset[]; targetAssetId: string; setTargetAssetId: (id: string) => void;
   manualCurrency: Currency | ''; setManualCurrency: (c: Currency | '') => void; manualInstitution: string; setManualInstitution: (s: string) => void; lastProcessedCount: number;
-  manualAmount: string; setManualAmount: (s: string) => void; onManualSubmit: () => void;
-}> = ({ isOpen, onClose, onUpload, isProcessing, assets, targetAssetId, setTargetAssetId, manualCurrency, setManualCurrency, manualInstitution, setManualInstitution, lastProcessedCount, manualAmount, setManualAmount, onManualSubmit }) => {
+  manualAmount: string; setManualAmount: (s: string) => void; 
+  manualDate: string; setManualDate: (s: string) => void; // 新增日期状态 Props
+  onManualSubmit: () => void;
+}> = ({ isOpen, onClose, onUpload, isProcessing, assets, targetAssetId, setTargetAssetId, manualCurrency, setManualCurrency, manualInstitution, setManualInstitution, lastProcessedCount, manualAmount, setManualAmount, manualDate, setManualDate, onManualSubmit }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn p-4">
@@ -553,20 +555,34 @@ const AIScanModal: React.FC<{
                 </div>
              )}
 
-             {/* 新增：手动金额输入 */}
-             <div>
-                <label className="block text-gray-500 text-xs font-bold mb-2">收益金额 <span className="text-[10px] font-normal text-gray-400 ml-1">(仅手动录入时填写)</span></label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">¥/$</span>
-                  <input 
-                    type="number" 
-                    value={manualAmount} 
-                    onChange={(e) => setManualAmount(e.target.value)} 
-                    disabled={isProcessing} 
-                    placeholder="0.00" 
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-8 pr-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 transition-all"
-                  />
-                </div>
+             {/* 修改：手动金额输入 + 日期选择（并排布局） */}
+             <div className="grid grid-cols-2 gap-4">
+                 <div>
+                    <label className="block text-gray-500 text-xs font-bold mb-2">收益金额 <span className="text-[10px] font-normal text-gray-400 ml-1">(选填)</span></label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">¥/$</span>
+                      <input 
+                        type="number" 
+                        value={manualAmount} 
+                        onChange={(e) => setManualAmount(e.target.value)} 
+                        disabled={isProcessing} 
+                        placeholder="0.00" 
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-14 pr-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 transition-all"
+                      />
+                    </div>
+                 </div>
+
+                 {/* 新增：日期选择 */}
+                 <div>
+                    <label className="block text-gray-500 text-xs font-bold mb-2">日期</label>
+                    <input 
+                        type="date" 
+                        value={manualDate}
+                        onChange={(e) => setManualDate(e.target.value)}
+                        disabled={isProcessing}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 transition-all"
+                    />
+                 </div>
              </div>
 
              <div>
@@ -674,7 +690,6 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
             <div className="flex justify-between items-center mb-3 px-1">
               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5"><History size={14} /> 资金明细</h4>
               <div className="flex items-center gap-2">
-                  {/* 修改按钮文字：AI 录入 -> 收益录入 */}
                   <button onClick={(e) => { e.stopPropagation(); onDirectAIScan(); }} className="text-xs bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-full text-indigo-600 flex items-center gap-1.5 hover:bg-indigo-100 font-bold shadow-sm transition-colors"><Sparkles size={12} /> 收益录入</button>
                   <button onClick={(e) => { e.stopPropagation(); setShowCalendar(true); }} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded-full text-gray-600 flex items-center gap-1.5 hover:bg-gray-100 font-medium shadow-sm transition-colors"><Calendar size={14} className="text-blue-500"/> 查看日历</button>
               </div>
@@ -803,7 +818,8 @@ export default function App() {
   const [scanTargetId, setScanTargetId] = useState<string>('auto'); 
   const [manualInstitution, setManualInstitution] = useState('');
   const [manualCurrency, setManualCurrency] = useState<Currency | ''>('');
-  const [manualAmount, setManualAmount] = useState(''); // 新增：手动输入金额状态
+  const [manualAmount, setManualAmount] = useState(''); 
+  const [manualDate, setManualDate] = useState<string>(new Date().toISOString().split('T')[0]); // 新增：手动日期状态
   const [showGuide, setShowGuide] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [isProcessingAI, setIsProcessingAI] = useState(false);
@@ -882,7 +898,7 @@ export default function App() {
 
   // Handlers
 
-  // 新增：手动处理收益录入
+  // 手动处理收益录入
   const handleManualEarningSubmit = async () => {
     if (!manualAmount || !user) return;
     const amt = parseFloat(manualAmount);
@@ -901,7 +917,7 @@ export default function App() {
 
     const newTx: Transaction = {
       id: Date.now().toString(),
-      date: new Date().toISOString().split('T')[0],
+      date: manualDate, // 使用手动选择的日期
       type: 'earning',
       amount: amt,
       currency: (manualCurrency as Currency) || asset.earningsCurrency || asset.currency,
@@ -909,7 +925,6 @@ export default function App() {
     };
 
     const updatedHistory = [newTx, ...asset.history];
-    // 更新收益货币（如果手动指定了新的货币）
     let earningsCurrencyUpdate = asset.earningsCurrency;
     if (newTx.currency && newTx.currency !== asset.currency) {
       earningsCurrencyUpdate = newTx.currency;
@@ -922,7 +937,6 @@ export default function App() {
       });
       setLastProcessedCount(1);
       setManualAmount('');
-      // 成功后延迟关闭，给用户反馈
       setTimeout(() => setShowScanModal(false), 500);
     } catch (e) {
       console.error(e);
@@ -1135,13 +1149,13 @@ export default function App() {
            Object.entries(assetsByInstitution).map(([institution, instAssets]) => (
              <div key={institution} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="bg-[#ededed]/50 px-5 py-3 border-b border-gray-100 flex items-center justify-between"><div className="flex items-center gap-2"><div className="w-1 h-4 bg-gray-800 rounded-full"></div><h3 className="font-bold text-gray-700 text-sm">{institution}</h3></div></div>
-                <div className="divide-y divide-gray-50">{instAssets.map(asset => <AssetItem key={asset.id} asset={asset} onEditTransaction={(tx) => setEditingTransaction({ assetId: asset.id, transaction: tx })} onDeleteTransaction={(txId) => handleDeleteSpecificTransaction(asset.id, txId)} onDelete={handleDeleteAssetRequest} onEditInfo={() => setEditingAssetInfo(asset)} onDirectAIScan={() => { setScanTargetId(asset.id); setManualCurrency(asset.earningsCurrency || asset.currency); setManualAmount(''); setShowScanModal(true); setLastProcessedCount(0); }} />)}</div>
+                <div className="divide-y divide-gray-50">{instAssets.map(asset => <AssetItem key={asset.id} asset={asset} onEditTransaction={(tx) => setEditingTransaction({ assetId: asset.id, transaction: tx })} onDeleteTransaction={(txId) => handleDeleteSpecificTransaction(asset.id, txId)} onDelete={handleDeleteAssetRequest} onEditInfo={() => setEditingAssetInfo(asset)} onDirectAIScan={() => { setScanTargetId(asset.id); setManualCurrency(asset.earningsCurrency || asset.currency); setManualAmount(''); setManualDate(new Date().toISOString().split('T')[0]); setShowScanModal(true); setLastProcessedCount(0); }} />)}</div>
              </div>
            ))
          }
       </div>
 
-      <div className="fixed bottom-8 left-0 right-0 flex justify-center z-40 pointer-events-none"><div className="pointer-events-auto bg-gray-900 text-white rounded-full shadow-2xl flex items-center p-1.5 px-6 gap-0 backdrop-blur-xl bg-opacity-95 hover:scale-105 transition duration-200"><button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70"><Plus size={18} className="text-blue-400" /> <span>记一笔</span></button><div className="w-px h-5 bg-gray-700 mx-1"></div><button onClick={() => { setScanTargetId('auto'); setManualInstitution(''); setManualCurrency(''); setManualAmount(''); setShowScanModal(true); setLastProcessedCount(0); }} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70"><Camera size={18} className="text-blue-400" /> <span>AI 识别</span></button></div></div>
+      <div className="fixed bottom-8 left-0 right-0 flex justify-center z-40 pointer-events-none"><div className="pointer-events-auto bg-gray-900 text-white rounded-full shadow-2xl flex items-center p-1.5 px-6 gap-0 backdrop-blur-xl bg-opacity-95 hover:scale-105 transition duration-200"><button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70"><Plus size={18} className="text-blue-400" /> <span>记一笔</span></button><div className="w-px h-5 bg-gray-700 mx-1"></div><button onClick={() => { setScanTargetId('auto'); setManualInstitution(''); setManualCurrency(''); setManualAmount(''); setManualDate(new Date().toISOString().split('T')[0]); setShowScanModal(true); setLastProcessedCount(0); }} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70"><Camera size={18} className="text-blue-400" /> <span>AI 识别</span></button></div></div>
 
       <AIScanModal 
         isOpen={showScanModal} 
@@ -1156,8 +1170,10 @@ export default function App() {
         manualInstitution={manualInstitution} 
         setManualInstitution={setManualInstitution} 
         lastProcessedCount={lastProcessedCount}
-        manualAmount={manualAmount} // Pass new props
+        manualAmount={manualAmount} 
         setManualAmount={setManualAmount}
+        manualDate={manualDate} 
+        setManualDate={setManualDate}
         onManualSubmit={handleManualEarningSubmit}
       />
       
