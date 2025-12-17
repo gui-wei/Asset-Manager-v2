@@ -4,7 +4,8 @@ import {
   Plus, ChevronDown, HelpCircle, History, Calendar, Wallet, 
   Pencil, X, TrendingUp, RefreshCw, Camera, Trash2, Settings, 
   AlertTriangle, Sparkles, ArrowRightLeft, Loader2, UserCircle, LogOut, 
-  UploadCloud, CheckCircle2, Mail, Lock, ArrowRight, Percent, Clock, BarChart4
+  UploadCloud, CheckCircle2, Mail, Lock, ArrowRight, Percent, Clock, BarChart4,
+  Check
 } from 'lucide-react';
 
 // Firebase Imports
@@ -84,11 +85,6 @@ const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRe
     const parts = compressedDataUrl.split(',');
     const cleanBase64 = parts.length > 1 ? parts[1] : compressedDataUrl;
     
-    const todayStr = new Date().toISOString().split('T')[0];
-    const yesterdayDate = new Date(Date.now() - 86400000);
-    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
-    const year = new Date().getFullYear();
-
     const prompt = `
       You are an expert personal finance assistant. Analyze this screenshot of an investment transaction.
       
@@ -495,10 +491,8 @@ const EarningsCalendar: React.FC<{ asset: Asset; onClose: () => void; }> = ({ as
                 <div key={day} className="flex flex-col items-center justify-start pt-1 h-14 rounded-lg bg-gray-50 border border-gray-100 relative overflow-hidden group hover:border-blue-200 transition-colors">
                   <span className="text-[10px] font-medium text-gray-400 mb-0.5 group-hover:text-blue-500">{day}</span>
                   {earning !== 0 && (
-                     // 🔥 日历部分也保持一致：红色正收益，绿色负收益，无+号
                      <span className={`text-[9px] font-bold leading-tight tracking-tighter ${earning > 0 ? 'text-red-500' : 'text-green-600'}`}>{earning > 0 ? '' : ''}{Math.abs(earning).toFixed(2)}</span>
                   )}
-                  {/* 🔥 存入显示为蓝色，无+号 */}
                   {deposits > 0 && <span className="text-[9px] font-bold text-blue-500 leading-tight tracking-tighter">{deposits.toLocaleString(undefined, {maximumFractionDigits:0})}</span>}
                 </div>
               );
@@ -525,13 +519,14 @@ const EarningsCalendar: React.FC<{ asset: Asset; onClose: () => void; }> = ({ as
 const AIScanModal: React.FC<{
   isOpen: boolean; onClose: () => void; onUpload: () => void; isProcessing: boolean; assets: Asset[]; targetAssetId: string; setTargetAssetId: (id: string) => void;
   manualCurrency: Currency | ''; setManualCurrency: (c: Currency | '') => void; manualInstitution: string; setManualInstitution: (s: string) => void; lastProcessedCount: number;
-}> = ({ isOpen, onClose, onUpload, isProcessing, assets, targetAssetId, setTargetAssetId, manualCurrency, setManualCurrency, manualInstitution, setManualInstitution, lastProcessedCount }) => {
+  manualAmount: string; setManualAmount: (s: string) => void; onManualSubmit: () => void;
+}> = ({ isOpen, onClose, onUpload, isProcessing, assets, targetAssetId, setTargetAssetId, manualCurrency, setManualCurrency, manualInstitution, setManualInstitution, lastProcessedCount, manualAmount, setManualAmount, onManualSubmit }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn p-4">
        <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl">
           <div className="flex justify-between items-center mb-6">
-             <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Sparkles size={20} className="text-purple-500" /> AI 录入明细</h2>
+             <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Sparkles size={20} className="text-purple-500" /> 收益录入明细</h2>
              <button onClick={onClose} disabled={isProcessing} className="p-1 hover:bg-gray-100 rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-colors"><X size={20} className="text-gray-400" /></button>
           </div>
           <div className="space-y-6">
@@ -543,19 +538,37 @@ const AIScanModal: React.FC<{
                 <div className="relative">
                    <select value={targetAssetId} onChange={(e) => setTargetAssetId(e.target.value)} disabled={isProcessing}
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-3 pr-10 text-sm font-bold text-gray-800 appearance-none focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-400 transition-all">
-                      <option value="auto">✨ 自动匹配 / 新建资产 (推荐)</option>
+                      <option value="auto">✨ 自动匹配 / 新建资产</option>
                       <option disabled>──────────</option>
                       {assets.map(asset => <option key={asset.id} value={asset.id}>{asset.institution} - {asset.productName}</option>)}
                    </select>
                    <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 </div>
              </div>
+             
              {targetAssetId === 'auto' && (
                 <div>
                    <label className="block text-gray-500 text-xs font-bold mb-2">投资渠道 (可选)</label>
                    <input type="text" value={manualInstitution} onChange={(e) => setManualInstitution(e.target.value)} disabled={isProcessing} placeholder="例如：支付宝" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm font-bold disabled:bg-gray-100 disabled:text-gray-400 transition-all" />
                 </div>
              )}
+
+             {/* 新增：手动金额输入 */}
+             <div>
+                <label className="block text-gray-500 text-xs font-bold mb-2">收益金额 <span className="text-[10px] font-normal text-gray-400 ml-1">(仅手动录入时填写)</span></label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">¥/$</span>
+                  <input 
+                    type="number" 
+                    value={manualAmount} 
+                    onChange={(e) => setManualAmount(e.target.value)} 
+                    disabled={isProcessing} 
+                    placeholder="0.00" 
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-8 pr-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 transition-all"
+                  />
+                </div>
+             </div>
+
              <div>
                 <label className="block text-gray-500 text-xs font-bold mb-2">确认货币种类 <span className="ml-2 text-[10px] text-gray-400 font-normal bg-gray-100 px-1.5 py-0.5 rounded">{targetAssetId === 'auto' ? '可选，若不选则自动识别' : '强制指定'}</span></label>
                 <div className="relative">
@@ -568,9 +581,25 @@ const AIScanModal: React.FC<{
                    <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 </div>
              </div>
-             <button onClick={onUpload} disabled={isProcessing} className={`w-full py-4 rounded-xl shadow-lg transition flex justify-center items-center gap-2 font-bold text-white ${isProcessing ? 'bg-gray-700 cursor-not-allowed' : 'bg-gray-900 active:scale-95 hover:bg-black'}`}>
-                {isProcessing ? <><Loader2 className="animate-spin" size={18} /><span>AI 正在分析中...</span></> : <><UploadCloud size={20} /><span>上传截图 (支持多张)</span></>}
-             </button>
+
+             {/* 底部按钮区域调整：双按钮 */}
+             <div className="flex gap-3">
+                <button 
+                  onClick={onManualSubmit} 
+                  disabled={isProcessing} 
+                  className="flex-1 py-4 bg-blue-500 hover:bg-blue-600 text-white rounded-xl shadow-lg transition flex justify-center items-center gap-2 font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                >
+                  <Check size={20} />
+                  <span>确认</span>
+                </button>
+                <button 
+                  onClick={onUpload} 
+                  disabled={isProcessing} 
+                  className={`flex-[2] py-4 rounded-xl shadow-lg transition flex justify-center items-center gap-2 font-bold text-white ${isProcessing ? 'bg-gray-700 cursor-not-allowed' : 'bg-gray-900 active:scale-95 hover:bg-black'}`}
+                >
+                  {isProcessing ? <><Loader2 className="animate-spin" size={18} /><span>AI 分析中...</span></> : <><UploadCloud size={20} /><span>上传截图 (支持多张)</span></>}
+                </button>
+             </div>
           </div>
        </div>
     </div>
@@ -585,14 +614,11 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
   const earningsCurrency = asset.earningsCurrency || asset.currency;
   const earningsSymbol = getSymbol(earningsCurrency);
   
-  // 1. Calculate Principal (Total Amount - Total Earnings)
   const totalEarningsInBase = convertCurrency(asset.totalEarnings, earningsCurrency, asset.currency);
   const principal = asset.currentAmount - totalEarningsInBase;
   
-  // 2. Yield Calculation (Unified Currency: Asset Base Currency)
   const holdingYield = principal > 0 ? (totalEarningsInBase / principal) * 100 : 0;
   
-  // 3. Real 7-day Yield (Unified Currency)
   const today = new Date();
   let sum7DayEarningsDisplay = 0; 
   for (let i = 0; i < 7; i++) {
@@ -604,7 +630,6 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
   const sum7DayEarningsInBase = convertCurrency(sum7DayEarningsDisplay, earningsCurrency, asset.currency);
   const real7DayYield = principal > 0 ? (sum7DayEarningsInBase / principal) * (365 / 7) * 100 : 0;
 
-  // Days held
   const getDaysHeld = () => {
     if (asset.history.length === 0) return 0;
     const earliestDate = asset.history.reduce((min, p) => p.date < min ? p.date : min, asset.history[0].date);
@@ -649,7 +674,8 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
             <div className="flex justify-between items-center mb-3 px-1">
               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5"><History size={14} /> 资金明细</h4>
               <div className="flex items-center gap-2">
-                  <button onClick={(e) => { e.stopPropagation(); onDirectAIScan(); }} className="text-xs bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-full text-indigo-600 flex items-center gap-1.5 hover:bg-indigo-100 font-bold shadow-sm transition-colors"><Sparkles size={12} /> AI 录入</button>
+                  {/* 修改按钮文字：AI 录入 -> 收益录入 */}
+                  <button onClick={(e) => { e.stopPropagation(); onDirectAIScan(); }} className="text-xs bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-full text-indigo-600 flex items-center gap-1.5 hover:bg-indigo-100 font-bold shadow-sm transition-colors"><Sparkles size={12} /> 收益录入</button>
                   <button onClick={(e) => { e.stopPropagation(); setShowCalendar(true); }} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded-full text-gray-600 flex items-center gap-1.5 hover:bg-gray-100 font-medium shadow-sm transition-colors"><Calendar size={14} className="text-blue-500"/> 查看日历</button>
               </div>
             </div>
@@ -657,19 +683,13 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
               {asset.history.length === 0 ? <p className="text-center text-xs text-gray-400 py-4">暂无记录</p> : asset.history.map(record => {
                   const txCurrency = record.currency || (record.type === 'deposit' ? asset.currency : earningsCurrency);
                   const txSymbol = getSymbol(txCurrency);
-                  // 🔥 核心修改：统一列表中的颜色逻辑，移除符号
-                  // 1. 如果是存入 (deposit)：蓝色
-                  // 2. 如果是收益 (earning) 且 > 0：红色
-                  // 3. 如果是收益 (earning) 且 <= 0：绿色
                   const isDeposit = record.type === 'deposit';
                   const isPositiveEarning = record.type === 'earning' && record.amount > 0;
                   
-                  // 根据条件计算颜色 Class
                   const textColorClass = isDeposit 
                     ? 'text-blue-500' 
                     : (isPositiveEarning ? 'text-red-500' : 'text-green-600');
                   
-                  // 圆点颜色也需要同步
                   const dotColorClass = isDeposit
                     ? 'bg-blue-500'
                     : (isPositiveEarning ? 'bg-red-500' : 'bg-green-600');
@@ -682,7 +702,6 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
                         <span className="text-gray-700 font-medium truncate max-w-[80px] sm:max-w-[120px]">{record.description}</span>
                       </div>
                       <div className="flex items-center gap-3">
-                        {/* 金额显示：只保留货币符号，去掉+号，使用 Math.abs() 显示绝对值 */}
                         <span className={`font-mono font-bold ${textColorClass}`}>
                             {txSymbol}{Math.abs(record.amount).toLocaleString()}
                         </span>
@@ -739,7 +758,6 @@ const EditAssetInfoModal: React.FC<{ asset: Asset; onSave: (asset: Asset) => voi
           <div><label className="block text-gray-500 text-xs font-bold mb-1.5">投资渠道</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={formData.institution} onChange={(e) => setFormData({ ...formData, institution: e.target.value })} /></div>
           <div><label className="block text-gray-500 text-xs font-bold mb-1.5">产品名称</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={formData.productName} onChange={(e) => setFormData({ ...formData, productName: e.target.value })} /></div>
           <div className="grid grid-cols-2 gap-4">
-            {/* ✅ 更新选项，加入股票 */}
             <div><label className="block text-gray-500 text-xs font-bold mb-1.5">资产类型</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none transition-all" value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value as AssetType})}><option value={AssetType.FUND}>基金</option><option value={AssetType.STOCK}>股票</option><option value={AssetType.GOLD}>黄金</option><option value={AssetType.OTHER}>其他</option></select></div>
             <div><label className="block text-gray-500 text-xs font-bold mb-1.5">本金货币</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none font-bold transition-all" value={formData.currency} onChange={(e) => setFormData({ ...formData, currency: e.target.value as Currency })}><option value="CNY">CNY (人民币)</option><option value="USD">USD (美元)</option><option value="HKD">HKD (港币)</option></select></div>
           </div>
@@ -785,6 +803,7 @@ export default function App() {
   const [scanTargetId, setScanTargetId] = useState<string>('auto'); 
   const [manualInstitution, setManualInstitution] = useState('');
   const [manualCurrency, setManualCurrency] = useState<Currency | ''>('');
+  const [manualAmount, setManualAmount] = useState(''); // 新增：手动输入金额状态
   const [showGuide, setShowGuide] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [isProcessingAI, setIsProcessingAI] = useState(false);
@@ -831,18 +850,13 @@ export default function App() {
   const totalAssets = assets.reduce((sum, a) => sum + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0);
   const totalEarnings = assets.reduce((sum, a) => sum + convertCurrency(a.totalEarnings, a.earningsCurrency || a.currency, dashboardCurrency), 0);
   
-  // Calculate Total Principal and Yield
   const totalPrincipal = totalAssets - totalEarnings;
   const totalYield = totalPrincipal > 0 ? (totalEarnings / totalPrincipal) * 100 : 0;
 
-  // Calculate Investment Duration
   const allDates = assets.flatMap(a => a.history.map(t => t.date));
   const minDate = allDates.length > 0 ? allDates.reduce((min, d) => d < min ? d : min, allDates[0]) : null;
   const daysInvested = minDate ? Math.max(0, Math.floor((new Date().getTime() - new Date(minDate).getTime()) / (1000 * 60 * 60 * 24))) : 0;
 
-  // Calculate Annualized Yield (Compound Annual Growth Rate - CAGR)
-  // Formula: ((Total Value / Total Principal) ^ (365 / Days Invested)) - 1
-  // Note: Only calculate if invested for at least 7 days to avoid extreme volatility
   let annualizedYield = 0;
   if (totalPrincipal > 0 && daysInvested > 7) {
       const growthRatio = totalAssets / totalPrincipal; // e.g. 1.05
@@ -850,7 +864,6 @@ export default function App() {
       annualizedYield = (Math.pow(growthRatio, yearRatio) - 1) * 100;
   }
 
-  // ✅ 更新图表数据逻辑，加入股票
   const chartData = [
     { name: '基金', value: assets.filter(a => a.type === AssetType.FUND).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
     { name: '股票', value: assets.filter(a => a.type === AssetType.STOCK).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
@@ -868,6 +881,55 @@ export default function App() {
   }, [assets]);
 
   // Handlers
+
+  // 新增：手动处理收益录入
+  const handleManualEarningSubmit = async () => {
+    if (!manualAmount || !user) return;
+    const amt = parseFloat(manualAmount);
+    if (isNaN(amt)) {
+      alert("请输入有效的金额");
+      return;
+    }
+
+    if (scanTargetId === 'auto') {
+      alert("手动录入时，请先选择一个确定的目标资产，或者使用“记一笔”功能创建新资产。");
+      return;
+    }
+
+    const asset = assets.find(a => a.id === scanTargetId);
+    if (!asset) return;
+
+    const newTx: Transaction = {
+      id: Date.now().toString(),
+      date: new Date().toISOString().split('T')[0],
+      type: 'earning',
+      amount: amt,
+      currency: (manualCurrency as Currency) || asset.earningsCurrency || asset.currency,
+      description: '手动录入收益'
+    };
+
+    const updatedHistory = [newTx, ...asset.history];
+    // 更新收益货币（如果手动指定了新的货币）
+    let earningsCurrencyUpdate = asset.earningsCurrency;
+    if (newTx.currency && newTx.currency !== asset.currency) {
+      earningsCurrencyUpdate = newTx.currency;
+    }
+
+    try {
+      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', scanTargetId), { 
+        history: updatedHistory,
+        earningsCurrency: earningsCurrencyUpdate
+      });
+      setLastProcessedCount(1);
+      setManualAmount('');
+      // 成功后延迟关闭，给用户反馈
+      setTimeout(() => setShowScanModal(false), 500);
+    } catch (e) {
+      console.error(e);
+      alert("保存失败，请重试");
+    }
+  };
+
   const handleAIUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length || !user) return;
     setIsProcessingAI(true);
@@ -1008,10 +1070,8 @@ export default function App() {
     setConfirmDeleteAssetId(null);
   };
 
-  // 2. NOW we can do conditional returns safely
   if (authLoading) return <div className="min-h-screen flex items-center justify-center bg-[#ededed]"><Loader2 className="animate-spin text-gray-400" size={32} /></div>;
 
-  // 如果没有登录，显示登录界面
   if (!user) {
     return <AuthScreen />;
   }
@@ -1029,7 +1089,6 @@ export default function App() {
                  <div className="flex items-center gap-2 mb-1"><p className="text-gray-400 text-xs font-medium tracking-wide">总资产估值</p><button onClick={() => setDashboardCurrency(curr => curr === 'CNY' ? 'USD' : curr === 'USD' ? 'HKD' : 'CNY')} className="text-[10px] font-bold bg-white/10 px-1.5 py-0.5 rounded text-gray-300 hover:bg-white/20 transition flex items-center gap-0.5">{dashboardCurrency} <RefreshCw size={8} /></button></div>
                  <h2 className="text-3xl sm:text-4xl font-bold mb-4 font-mono tracking-tight animate-fadeIn">{dashboardCurrency === 'USD' ? '$' : dashboardCurrency === 'HKD' ? 'HK$' : '¥'} {totalAssets.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</h2>
                  <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
-                    {/* 累计收益卡片 */}
                     <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
                         <TrendingUp size={14} className="text-red-400" />
                         <div>
@@ -1037,7 +1096,6 @@ export default function App() {
                             <p className="text-sm font-bold leading-none">{totalEarnings > 0 ? '+' : ''}{totalEarnings.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
                         </div>
                     </div>
-                    {/* 持有收益率卡片 */}
                     <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
                         <Percent size={14} className="text-yellow-400" />
                         <div>
@@ -1047,7 +1105,6 @@ export default function App() {
                             </p>
                         </div>
                     </div>
-                    {/* 投资时长卡片 */}
                     <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
                         <Clock size={14} className="text-blue-400" />
                         <div>
@@ -1057,7 +1114,6 @@ export default function App() {
                             </p>
                         </div>
                     </div>
-                    {/* 新增：推测年化卡片 */}
                     <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
                         <BarChart4 size={14} className="text-purple-400" />
                         <div>
@@ -1079,17 +1135,33 @@ export default function App() {
            Object.entries(assetsByInstitution).map(([institution, instAssets]) => (
              <div key={institution} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="bg-[#ededed]/50 px-5 py-3 border-b border-gray-100 flex items-center justify-between"><div className="flex items-center gap-2"><div className="w-1 h-4 bg-gray-800 rounded-full"></div><h3 className="font-bold text-gray-700 text-sm">{institution}</h3></div></div>
-                <div className="divide-y divide-gray-50">{instAssets.map(asset => <AssetItem key={asset.id} asset={asset} onEditTransaction={(tx) => setEditingTransaction({ assetId: asset.id, transaction: tx })} onDeleteTransaction={(txId) => handleDeleteSpecificTransaction(asset.id, txId)} onDelete={handleDeleteAssetRequest} onEditInfo={() => setEditingAssetInfo(asset)} onDirectAIScan={() => { setScanTargetId(asset.id); setManualCurrency(asset.earningsCurrency || asset.currency); setShowScanModal(true); setLastProcessedCount(0); }} />)}</div>
+                <div className="divide-y divide-gray-50">{instAssets.map(asset => <AssetItem key={asset.id} asset={asset} onEditTransaction={(tx) => setEditingTransaction({ assetId: asset.id, transaction: tx })} onDeleteTransaction={(txId) => handleDeleteSpecificTransaction(asset.id, txId)} onDelete={handleDeleteAssetRequest} onEditInfo={() => setEditingAssetInfo(asset)} onDirectAIScan={() => { setScanTargetId(asset.id); setManualCurrency(asset.earningsCurrency || asset.currency); setManualAmount(''); setShowScanModal(true); setLastProcessedCount(0); }} />)}</div>
              </div>
            ))
          }
       </div>
 
-      <div className="fixed bottom-8 left-0 right-0 flex justify-center z-40 pointer-events-none"><div className="pointer-events-auto bg-gray-900 text-white rounded-full shadow-2xl flex items-center p-1.5 px-6 gap-0 backdrop-blur-xl bg-opacity-95 hover:scale-105 transition duration-200"><button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70"><Plus size={18} className="text-blue-400" /> <span>记一笔</span></button><div className="w-px h-5 bg-gray-700 mx-1"></div><button onClick={() => { setScanTargetId('auto'); setManualInstitution(''); setManualCurrency(''); setShowScanModal(true); setLastProcessedCount(0); }} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70"><Camera size={18} className="text-blue-400" /> <span>AI 识别</span></button></div></div>
+      <div className="fixed bottom-8 left-0 right-0 flex justify-center z-40 pointer-events-none"><div className="pointer-events-auto bg-gray-900 text-white rounded-full shadow-2xl flex items-center p-1.5 px-6 gap-0 backdrop-blur-xl bg-opacity-95 hover:scale-105 transition duration-200"><button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70"><Plus size={18} className="text-blue-400" /> <span>记一笔</span></button><div className="w-px h-5 bg-gray-700 mx-1"></div><button onClick={() => { setScanTargetId('auto'); setManualInstitution(''); setManualCurrency(''); setManualAmount(''); setShowScanModal(true); setLastProcessedCount(0); }} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70"><Camera size={18} className="text-blue-400" /> <span>AI 识别</span></button></div></div>
 
-      <AIScanModal isOpen={showScanModal} onClose={() => !isProcessingAI && setShowScanModal(false)} onUpload={() => fileInputRef.current?.click()} isProcessing={isProcessingAI} assets={assets} targetAssetId={scanTargetId} setTargetAssetId={setScanTargetId} manualCurrency={manualCurrency} setManualCurrency={setManualCurrency} manualInstitution={manualInstitution} setManualInstitution={setManualInstitution} lastProcessedCount={lastProcessedCount} />
+      <AIScanModal 
+        isOpen={showScanModal} 
+        onClose={() => !isProcessingAI && setShowScanModal(false)} 
+        onUpload={() => fileInputRef.current?.click()} 
+        isProcessing={isProcessingAI} 
+        assets={assets} 
+        targetAssetId={scanTargetId} 
+        setTargetAssetId={setScanTargetId} 
+        manualCurrency={manualCurrency} 
+        setManualCurrency={setManualCurrency} 
+        manualInstitution={manualInstitution} 
+        setManualInstitution={setManualInstitution} 
+        lastProcessedCount={lastProcessedCount}
+        manualAmount={manualAmount} // Pass new props
+        setManualAmount={setManualAmount}
+        onManualSubmit={handleManualEarningSubmit}
+      />
+      
       {showAddModal && <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn"><div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-slideUp"><h2 className="text-xl font-bold mb-6 text-gray-800 text-center">记录新资产</h2><div className="space-y-4"><SmartInput label="投资渠道" placeholder="例如：支付宝" value={newAsset.institution} onChange={(v) => setNewAsset({...newAsset, institution: v})} suggestions={['支付宝', '微信理财通', '招商银行', '工商银行']} /><SmartInput label="产品名称" placeholder="例如：易方达蓝筹" value={newAsset.productName} onChange={(v) => setNewAsset({...newAsset, productName: v})} suggestions={getUniqueProductNames(assets)} /><div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-500 text-xs font-bold mb-1.5">记录日期</label><input type="date" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" value={newAsset.date} onChange={(e) => setNewAsset({...newAsset, date: e.target.value})} /></div>
-      {/* ✅ 更新选项，加入股票 */}
       <div><label className="block text-gray-500 text-xs font-bold mb-1.5">资产类型</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm appearance-none" value={newAsset.type} onChange={(e) => setNewAsset({...newAsset, type: e.target.value as AssetType})}><option value={AssetType.FUND}>基金</option><option value={AssetType.STOCK}>股票</option><option value={AssetType.GOLD}>黄金</option><option value={AssetType.OTHER}>其他</option></select></div></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-500 text-xs font-bold mb-1.5">货币种类</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm appearance-none font-bold" value={newAsset.currency} onChange={(e) => setNewAsset({...newAsset, currency: e.target.value as Currency})}><option value="CNY">CNY</option><option value="USD">USD</option><option value="HKD">HKD</option></select></div><div><label className="block text-gray-500 text-xs font-bold mb-1.5">金额</label><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-lg font-bold" placeholder="0.00" value={newAsset.amount} onChange={(e) => setNewAsset({...newAsset, amount: e.target.value})} /></div></div><div className="flex gap-4"><div className="flex-1"><label className="block text-gray-500 text-xs font-bold mb-1.5">年化 (%)</label><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" placeholder="2.5" value={newAsset.yield} onChange={(e) => setNewAsset({...newAsset, yield: e.target.value})} /></div><div className="flex-[2]"><label className="block text-gray-500 text-xs font-bold mb-1.5">备注</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" placeholder="选填" value={newAsset.remark} onChange={(e) => setNewAsset({...newAsset, remark: e.target.value})} /></div></div><div className="flex gap-3 mt-8"><button onClick={() => setShowAddModal(false)} className="flex-1 py-3.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-sm">取消</button><button onClick={handleAddAsset} className="flex-1 py-3.5 rounded-xl bg-gray-900 text-white font-bold text-sm shadow-lg">确认</button></div></div></div></div>}
       {editingAssetInfo && <EditAssetInfoModal asset={editingAssetInfo} onSave={handleSaveAssetInfo} onClose={() => setEditingAssetInfo(null)} />}
       {editingTransaction && <EditTransactionModal transaction={editingTransaction.transaction} onSave={handleUpdateTransaction} onDelete={() => handleDeleteTransaction(editingTransaction.transaction.id)} onClose={() => setEditingTransaction(null)} />}
