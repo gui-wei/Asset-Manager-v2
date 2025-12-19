@@ -19,8 +19,7 @@ import {
   signInAnonymously,
   signInWithCustomToken
 } from "firebase/auth";
-// 🔥 关键修复：将 User 作为类型导入，解决构建报错
-import type { User } from "firebase/auth";
+// 🔥 移除 User 类型导入，避免构建错误
 
 import { 
   getFirestore, 
@@ -922,14 +921,14 @@ const EditAssetInfoModal: React.FC<{ asset: Asset; onSave: (asset: Asset) => voi
   );
 };
 
-const UserProfileModal: React.FC<{ user: User; onClose: () => void; onLogout: () => void; }> = ({ user, onClose, onLogout }) => {
+const UserProfileModal: React.FC<{ user: any; onClose: () => void; onLogout: () => void; }> = ({ user, onClose, onLogout }) => {
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
       <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-scaleIn">
         <div className="flex flex-col items-center mb-6">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4"><UserCircle size={48} className="text-gray-400" /></div>
           <h3 className="font-bold text-lg text-gray-800">当前账号</h3>
-          <p className="text-sm text-gray-500 font-mono mt-1 text-center truncate w-full px-4">{user.isAnonymous ? "匿名用户 (数据仅在本地/当前会话有效)" : user.email || user.uid}</p>
+          <p className="text-sm text-gray-500 font-mono mt-1 text-center truncate w-full px-4">{user?.isAnonymous ? "匿名用户 (数据仅在本地/当前会话有效)" : user?.email || user?.uid}</p>
         </div>
         <div className="space-y-3">
           <button onClick={onLogout} className="w-full py-3.5 bg-red-50 text-red-500 font-bold text-sm rounded-xl flex items-center justify-center gap-2 hover:bg-red-100 transition"><LogOut size={16} /> 退出登录</button>
@@ -944,19 +943,30 @@ const UserProfileModal: React.FC<{ user: User; onClose: () => void; onLogout: ()
  * --- MAIN COMPONENT ---
  */
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [assets, setAssets] = useState<Asset[]>([]);
+  
+  const [activeTab, setActiveTab] = useState<'assets' | 'analysis' | 'ai' | 'me'>('assets');
+  const [privacyMode, setPrivacyMode] = useState(false);
+  const [dashboardCurrency, setDashboardCurrency] = useState<Currency>('CNY');
+
+  // Modal Control
   const [showAddModal, setShowAddModal] = useState(false);
   const [showScanModal, setShowScanModal] = useState(false);
   const [scanTargetId, setScanTargetId] = useState<string>('auto'); 
   const [manualInstitution, setManualInstitution] = useState('');
   const [manualCurrency, setManualCurrency] = useState<Currency | ''>('');
+  const [manualAmount, setManualAmount] = useState(''); 
+  const [manualDate, setManualDate] = useState<string>(new Date().toISOString().split('T')[0]); 
+  
+  // 新增：isManualEntryMode 状态，用于区分是点击了主页扫描按钮还是点击了卡片录入按钮
+  const [modalMode, setModalMode] = useState<'global' | 'earning' | 'withdrawal'>('global');
+
   const [showGuide, setShowGuide] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [isProcessingAI, setIsProcessingAI] = useState(false);
   const [lastProcessedCount, setLastProcessedCount] = useState(0);
-  const [dashboardCurrency, setDashboardCurrency] = useState<Currency>('CNY');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [editingTransaction, setEditingTransaction] = useState<{ assetId: string, transaction: Transaction } | null>(null);
   const [editingAssetInfo, setEditingAssetInfo] = useState<Asset | null>(null);
@@ -994,47 +1004,54 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // --- Derived State & Calculations (RESTORED) ---
-  const totalAssets = assets.reduce((sum, a) => sum + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0);
-  const totalEarnings = assets.reduce((sum, a) => sum + convertCurrency(a.totalEarnings, a.earningsCurrency || a.currency, dashboardCurrency), 0);
-  
-  // Calculate Total Principal and Yield
-  const totalPrincipal = totalAssets - totalEarnings;
-  const totalYield = totalPrincipal > 0 ? (totalEarnings / totalPrincipal) * 100 : 0;
-
-  // Calculate Investment Duration
-  const allDates = assets.flatMap(a => a.history.map(t => t.date));
-  const minDate = allDates.length > 0 ? allDates.reduce((min, d) => d < min ? d : min, allDates[0]) : null;
-  const daysInvested = minDate ? Math.max(0, Math.floor((new Date().getTime() - new Date(minDate).getTime()) / (1000 * 60 * 60 * 24))) : 0;
-
-  // Calculate Annualized Yield (Compound Annual Growth Rate - CAGR)
-  // Formula: ((Total Value / Total Principal) ^ (365 / Days Invested)) - 1
-  // Note: Only calculate if invested for at least 7 days to avoid extreme volatility
-  let annualizedYield = 0;
-  if (totalPrincipal > 0 && daysInvested > 7) {
-      const growthRatio = totalAssets / totalPrincipal; // e.g. 1.05
-      const yearRatio = 365 / daysInvested; // e.g. 2.0 (if invested for 6 months)
-      annualizedYield = (Math.pow(growthRatio, yearRatio) - 1) * 100;
-  }
-
-  // ✅ 更新图表数据逻辑，加入股票
-  const chartData = [
-    { name: '基金', value: assets.filter(a => a.type === AssetType.FUND).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
-    { name: '股票', value: assets.filter(a => a.type === AssetType.STOCK).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
-    { name: '黄金', value: assets.filter(a => a.type === AssetType.GOLD).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
-    { name: '其他', value: assets.filter(a => a.type === AssetType.OTHER).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
-  ].filter(d => d.value > 0);
-
-  const assetsByInstitution = useMemo(() => {
-    return assets.reduce((groups, asset) => {
-      const key = asset.institution || '其他';
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(asset);
-      return groups;
-    }, {} as Record<string, Asset[]>);
-  }, [assets]);
-
   // Handlers
+
+  // 手动处理收益/赎回录入
+  const handleManualEarningSubmit = async () => {
+    if (!manualAmount || !user) return;
+    const amt = parseFloat(manualAmount);
+    if (isNaN(amt)) {
+      alert("请输入有效的金额");
+      return;
+    }
+
+    if (scanTargetId === 'auto') {
+      alert("手动录入时，请先选择一个确定的目标资产，或者使用“记一笔”功能创建新资产。");
+      return;
+    }
+
+    const asset = assets.find(a => a.id === scanTargetId);
+    if (!asset) return;
+
+    const newTx: Transaction = {
+      id: Date.now().toString(),
+      date: manualDate, 
+      type: modalMode === 'withdrawal' ? 'withdrawal' : 'earning',
+      amount: amt,
+      currency: (manualCurrency as Currency) || asset.earningsCurrency || asset.currency,
+      description: modalMode === 'withdrawal' ? '手动录入赎回' : '手动录入收益'
+    };
+
+    const updatedHistory = [newTx, ...asset.history];
+    let earningsCurrencyUpdate = asset.earningsCurrency;
+    if (newTx.currency && newTx.currency !== asset.currency) {
+      earningsCurrencyUpdate = newTx.currency;
+    }
+
+    try {
+      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', scanTargetId), { 
+        history: updatedHistory,
+        earningsCurrency: earningsCurrencyUpdate
+      });
+      setLastProcessedCount(1);
+      setManualAmount('');
+      setTimeout(() => setShowScanModal(false), 500);
+    } catch (e) {
+      console.error(e);
+      alert("保存失败，请重试");
+    }
+  };
+
   const handleAIUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length || !user) return;
     setIsProcessingAI(true);
@@ -1069,14 +1086,28 @@ export default function App() {
       for (const group of groups.values()) {
          let targetId = scanTargetId !== 'auto' ? scanTargetId : findMatchingAsset(assets, group.product, manualInstitution || group.inst, group.currency)?.id;
          
-         const newTx: Transaction[] = group.records.filter(r => r.amount).map(r => ({
-            id: Date.now() + Math.random().toString(),
-            date: r.date,
-            type: r.type,
-            amount: r.amount,
-            currency: r.currency as Currency,
-            description: r.type === 'deposit' ? 'AI 识别买入' : 'AI 识别收益'
-         }));
+         const newTx: Transaction[] = group.records.filter(r => r.amount).map(r => {
+            let txType = r.type;
+            let desc = '';
+            
+            if (modalMode === 'withdrawal') {
+                txType = 'withdrawal';
+                desc = 'AI 识别赎回';
+            } else if (txType === 'withdrawal') {
+                desc = 'AI 识别赎回';
+            } else {
+                desc = r.type === 'deposit' ? 'AI 识别买入' : 'AI 识别收益';
+            }
+
+            return {
+                id: Date.now() + Math.random().toString(),
+                date: r.date,
+                type: txType,
+                amount: r.amount,
+                currency: r.currency as Currency,
+                description: desc
+            };
+         });
 
          if (targetId) {
             const asset = assets.find(a => a.id === targetId)!;
@@ -1175,10 +1206,8 @@ export default function App() {
     setConfirmDeleteAssetId(null);
   };
 
-  // 2. NOW we can do conditional returns safely
   if (authLoading) return <div className="min-h-screen flex items-center justify-center bg-[#ededed]"><Loader2 className="animate-spin text-gray-400" size={32} /></div>;
 
-  // 如果没有登录，显示登录界面
   if (!user) {
     return <AuthScreen />;
   }
@@ -1302,6 +1331,7 @@ export default function App() {
             <div className="flex-[2]"><label className="block text-gray-500 text-xs font-bold mb-1.5">备注</label>
             {/* 统一高度修改：h-12 */}
             <input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl h-12 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="选填" value={newAsset.remark} onChange={(e) => setNewAsset({...newAsset, remark: e.target.value})} /></div></div><div className="flex gap-3 mt-8"><button onClick={() => setShowAddModal(false)} className="flex-1 py-3.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-sm hover:bg-gray-200 transition-colors">取消</button><button onClick={handleAddAsset} className="flex-1 py-3.5 rounded-xl bg-gray-900 text-white font-bold text-sm shadow-lg hover:bg-black transition-colors">确认</button></div></div></div></div>}
+      
       {editingAssetInfo && <EditAssetInfoModal asset={editingAssetInfo} onSave={handleSaveAssetInfo} onClose={() => setEditingAssetInfo(null)} />}
       {editingTransaction && <EditTransactionModal transaction={editingTransaction.transaction} onSave={handleUpdateTransaction} onDelete={() => handleDeleteTransaction(editingTransaction.transaction.id)} onClose={() => setEditingTransaction(null)} />}
       {confirmDeleteAssetId && <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn"><div className="bg-white w-full max-w-xs rounded-2xl p-6 shadow-2xl"><div className="flex flex-col items-center text-center mb-6"><div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4"><AlertTriangle size={24} className="text-red-500" /></div><h3 className="text-lg font-bold text-gray-800">确认删除该资产？</h3><p className="text-sm text-gray-500 mt-2">删除后，该资产的所有历史记录和收益明细将无法恢复。</p></div><div className="flex gap-3"><button onClick={() => setConfirmDeleteAssetId(null)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm">取消</button><button onClick={executeDeleteAsset} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold text-sm">确认删除</button></div></div></div>}
