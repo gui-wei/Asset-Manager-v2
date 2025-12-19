@@ -6,9 +6,10 @@ import {
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
-// [FIX] 使用相对路径 ../../ 替代 @/，确保向上两级找到根目录文件
+// [修复核心] 
+// 之前是 '../types' (找 src/types - 错误)
+// 现在是 '../../types' (找 root/types - 正确)
 import { Asset, Transaction, AssetType, Currency } from '../../types'; 
-// [FIX] 使用相对路径 ../../ 替代 @/
 import EarningsCalendar from '../../components/EarningsCalendar';
 
 // --- 辅助函数 ---
