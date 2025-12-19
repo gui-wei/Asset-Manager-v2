@@ -6,11 +6,10 @@ import {
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
-// [修复核心] 
-// 之前是 '../types' (找 src/types - 错误)
-// 现在是 '../../types' (找 root/types - 正确)
-import { Asset, Transaction, AssetType, Currency } from '../../types'; 
-import EarningsCalendar from '../../components/EarningsCalendar';
+// [FIX] 现在 vite.config.ts 已修复，我们可以安全地使用 @/ 别名
+// 这将直接指向根目录，不再受文件层级深度的影响
+import { Asset, Transaction, AssetType, Currency } from '@/types'; 
+import EarningsCalendar from '@/components/EarningsCalendar';
 
 // --- 辅助函数 ---
 const RATES: Record<Currency, number> = { CNY: 1, USD: 7.2, HKD: 0.92 };
