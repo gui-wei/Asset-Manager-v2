@@ -6,8 +6,8 @@ import {
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
-// [FIX] 现在 vite.config.ts 已修复，我们可以安全地使用 @/ 别名
-// 这将直接指向根目录，不再受文件层级深度的影响
+// [FIX] 使用配置好的 @ 别名，直接指向根目录
+// 这样可以避免相对路径 ../../ 在不同构建环境下解析层级出错的问题
 import { Asset, Transaction, AssetType, Currency } from '@/types'; 
 import EarningsCalendar from '@/components/EarningsCalendar';
 
@@ -147,9 +147,6 @@ const AssetItem: React.FC<{
   );
 };
 
-/**
- * --- 主页面组件: AssetsPage ---
- */
 interface AssetsPageProps {
   assets: Asset[];
   dashboardCurrency: Currency;
