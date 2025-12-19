@@ -13,13 +13,15 @@ import { initializeApp } from "firebase/app";
 import { 
   getAuth, 
   onAuthStateChanged,
-  User,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
   signInAnonymously,
   signInWithCustomToken
 } from "firebase/auth";
+// 修复：单独导入 User 类型
+import type { User } from "firebase/auth";
+
 import { 
   getFirestore, 
   collection, 
@@ -354,7 +356,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onChange }) => {
     { id: 'assets', label: '资产', icon: Wallet },
     { id: 'analysis', label: '趋势', icon: TrendingUp },
     { id: 'ai', label: 'AI', icon: Sparkles },
-    { id: 'me', label: '我的', icon: User },
+    { id: 'me', label: '我的', icon: UserCircle },
   ] as const;
 
   return (
@@ -786,7 +788,9 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
                 asset.type === AssetType.GOLD ? 'bg-gradient-to-br from-yellow-400 to-yellow-600' : 
                 'bg-gradient-to-br from-purple-400 to-purple-600'
             }`}>
-              {asset.type === AssetType.FUND ? '基' : asset.type === AssetType.STOCK ? '股' : asset.type === AssetType.GOLD ? '金' : '其'}
+              {asset.type === AssetType.FUND ? '基' : 
+               asset.type === AssetType.STOCK ? '股' : 
+               asset.type === AssetType.GOLD ? '金' : '其'}
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="font-bold text-gray-800 text-base break-words leading-tight">{asset.productName}</h3>
@@ -1332,7 +1336,6 @@ export default function App() {
      if (!newAsset.productName || !newAsset.amount || !user) return;
      const amt = parseFloat(newAsset.amount);
      const tx: Transaction = { id: Date.now().toString(), date: newAsset.date, type: 'deposit', amount: amt, currency: newAsset.currency, description: newAsset.remark || '手动记录' };
-     
      const existing = assets.find(a => a.institution === newAsset.institution && a.productName === newAsset.productName && a.currency === newAsset.currency);
      
      if (existing) {
@@ -1346,33 +1349,48 @@ export default function App() {
      setShowAddModal(false);
   };
 
-  const handleEditAsset = async (asset: Asset) => {
+  const handleUpdateTransaction = async (updatedTx: Transaction) => {
+    if (!editingTransaction || !user) return;
+    const asset = assets.find(a => a.id === editingTransaction.assetId);
+    if (!asset) return;
+    const newHistory = asset.history.map(tx => tx.id === updatedTx.id ? updatedTx : tx);
+    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', asset.id), { history: newHistory });
+    setEditingTransaction(null);
+  };
+
+  const handleDeleteTransaction = async (txId: string) => {
+    if (!editingTransaction || !user) return;
+    const asset = assets.find(a => a.id === editingTransaction.assetId);
+    if (!asset) return;
+    const newHistory = asset.history.filter(tx => tx.id !== txId);
+    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', asset.id), { history: newHistory });
+    setEditingTransaction(null);
+  };
+
+  const handleDeleteSpecificTransaction = async (assetId: string, txId: string) => {
     if (!user) return;
-    const { id, currentAmount, totalEarnings, dailyEarnings, history, ...rest } = asset;
+    const asset = assets.find(a => a.id === assetId);
+    if (!asset) return;
+    const newHistory = asset.history.filter(tx => tx.id !== txId);
+    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', assetId), { history: newHistory });
+    setEditingTransaction(null);
+  };
+
+  const handleSaveAssetInfo = async (updatedAsset: Asset) => {
+    if (!user) return;
+    const { id, currentAmount, totalEarnings, dailyEarnings, history, ...rest } = updatedAsset;
     await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', id), rest);
+    setEditingAssetInfo(null);
   };
 
-  const handleDeleteAsset = async (id: string) => {
-    if (!user) return;
-    await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', id));
+  const handleDeleteAssetRequest = (id: string) => {
+    setConfirmDeleteAssetId(id);
   };
 
-  const handleEditTransaction = async (assetId: string, tx: Transaction) => {
-    if (!user) return;
-    const asset = assets.find(a => a.id === assetId);
-    if (!asset) return;
-    const newHistory = asset.history.map(h => h.id === tx.id ? tx : h);
-    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', assetId), { history: newHistory });
-    setEditingTransaction(null);
-  };
-
-  const handleDeleteTransaction = async (assetId: string, txId: string) => {
-    if (!user) return;
-    const asset = assets.find(a => a.id === assetId);
-    if (!asset) return;
-    const newHistory = asset.history.filter(h => h.id !== txId);
-    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', assetId), { history: newHistory });
-    setEditingTransaction(null);
+  const executeDeleteAsset = async () => {
+    if (!confirmDeleteAssetId || !user) return;
+    await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', confirmDeleteAssetId));
+    setConfirmDeleteAssetId(null);
   };
 
   if (authLoading) return <div className="min-h-screen flex items-center justify-center bg-[#ededed]"><Loader2 className="animate-spin text-gray-400" size={32} /></div>;
