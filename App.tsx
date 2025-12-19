@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { 
   Plus, ChevronDown, HelpCircle, History, Calendar, Wallet, 
   Pencil, X, TrendingUp, RefreshCw, Camera, Trash2, Settings, 
   AlertTriangle, Sparkles, ArrowRightLeft, Loader2, UserCircle, LogOut, 
   UploadCloud, CheckCircle2, Mail, Lock, ArrowRight, Percent, Clock, BarChart4,
-  Check, ArrowUpRight
+  Check, ArrowUpRight, Eye, EyeOff, Shield
 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
 // Firebase Imports
 import { initializeApp } from "firebase/app";
@@ -46,7 +46,6 @@ export enum AssetType {
 
 export type Currency = 'CNY' | 'USD' | 'HKD';
 
-// Update 1: Add 'withdrawal' type
 export interface Transaction {
   id: string;
   date: string; 
@@ -71,7 +70,6 @@ export interface Asset {
   dailyEarnings: Record<string, number>;
 }
 
-// Update 2: Add 'withdrawal' type to AI record
 export interface AIAssetRecord {
   date: string;
   amount: number;
@@ -157,6 +155,7 @@ const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promi
   });
 };
 
+// Fixed: Set empty string as apiKey is provided by environment at runtime
 const apiKey = ""; 
 
 const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRecord[]> => {
@@ -167,7 +166,6 @@ const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRe
     const parts = compressedDataUrl.split(',');
     const cleanBase64 = parts.length > 1 ? parts[1] : compressedDataUrl;
     
-    // Update 3: Enhanced Prompt for Withdrawal/Redemption
     const prompt = `
       You are an expert personal finance assistant. Analyze this screenshot of an investment transaction.
       
@@ -176,14 +174,21 @@ const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRe
       **INTELLIGENT EXTRACTION RULES**:
 
       1. **Date (CRITICAL T+N Logic)**:
-         - Prioritize "Confirmation Date" (确认日期, 确认交易, 结算日期) over "Order Date".
+         - Financial transactions have "Order Time" and "Confirmation/Settlement Time".
+         - **RULE**: Always prioritize the **"Confirmation Date"** (确认日期, 确认交易, 结算日期, 完成日期) over the "Order Date".
+         - Only use "Order/Transaction Time" (下单时间) if NO confirmation date is visible.
          - Format: YYYY-MM-DD.
 
-      2. **Product Name**:
-         - Extract the Core Product Name. Remove redundant suffixes.
+      2. **Product Name (Human-Like Grouping)**:
+         - Extract the **Core Product Name**.
+         - **Action**: Intelligent Cleaning. Remove noise that splits identical assets into duplicates.
+         - *Example*: If image says "China Fund USD (Class B Acc)", output "China Fund".
+         - Remove suffixes like "Class A/B/C", "(Acc)", "(Dist)", "USD/CNY" ONLY IF they are just redundant labels. 
+         - Keep unique identifiers if they denote a fundamentally different asset (e.g. "Bond Fund" vs "Equity Fund").
 
-      3. **Institution**:
-         - Identify the Asset Manager/Platform (e.g. "China Asset Mgmt", "Alipay").
+      3. **Institution (Entity Recognition)**:
+         - Identify the **Asset Manager** or **Platform** holding the asset (e.g. "China Asset Mgmt", "Alipay").
+         - **Negative Rule**: Ignore "Payment Method" (付款方式). If the user paid via "ZA Bank" to buy a "China Fund", the Institution is "China Fund" (or the App name), NOT "ZA Bank".
 
       4. **Type (CRITICAL)**:
          - **deposit**: Capital inflow (Buy, Purchase, Subscription, 已交收, 买入).
@@ -191,7 +196,7 @@ const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRe
          - **withdrawal**: Capital outflow (Sell, Redemption, 卖出, 赎回, 取出, 资金转出).
 
       5. **Asset Type**:
-         - Infer Fund/Stock/Gold/Other based on keywords.
+         - Infer Fund/Stock/Gold/Other based on keywords (e.g., "Stock", "Share", "Equities", "Gold", "ETF", "Bond").
 
       OUTPUT JSON ONLY: { "records": [ { "productName": "...", "institution": "...", "amount": number, "date": "...", "type": "deposit"|"earning"|"withdrawal", "currency": "CNY"|"USD"|"HKD", "assetType": "Fund"|"Stock"|"Gold"|"Other" } ] }
     `;
@@ -261,8 +266,7 @@ const consolidateAssets = (rawAssets: Asset[]): Asset[] => {
   return rawAssets.map(asset => {
     let totalPrincipalBase = 0; 
     let totalEarningsBase = 0;
-    let totalEarningsDisplay = 0;
-    // Track withdrawals for current amount calculation
+    let totalEarningsDisplay = 0; 
     let totalWithdrawalBase = 0;
     const dailyMap: Record<string, number> = {}; 
 
@@ -280,7 +284,6 @@ const consolidateAssets = (rawAssets: Asset[]): Asset[] => {
         const earningForBase = convertCurrency(tx.amount, txCurrency, asset.currency);
         totalEarningsBase += earningForBase;
       } else if (tx.type === 'withdrawal') {
-        // Update 4: Handle withdrawals in consolidation
         totalWithdrawalBase += convertCurrency(tx.amount, txCurrency, asset.currency);
       }
     });
@@ -301,6 +304,90 @@ const consolidateAssets = (rawAssets: Asset[]): Asset[] => {
 /**
  * --- COMPONENTS ---
  */
+
+interface TopNavBarProps {
+  title: string;
+  privacyMode: boolean;
+  onTogglePrivacy: () => void;
+  onScan: () => void;
+}
+
+const TopNavBar: React.FC<TopNavBarProps> = ({ title, privacyMode, onTogglePrivacy, onScan }) => {
+  return (
+    <header className="sticky top-0 z-40 bg-[#ededed]/90 backdrop-blur-md px-6 pt-12 pb-4 flex justify-between items-end">
+      {/* 左侧：大标题 */}
+      <div>
+        <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight leading-none">
+          {title}
+        </h1>
+      </div>
+
+      {/* 右侧：功能按钮组 */}
+      <div className="flex items-center gap-3">
+        <button 
+          onClick={onTogglePrivacy}
+          className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-gray-100 text-gray-600 hover:bg-gray-50 active:scale-95 transition-all"
+          aria-label={privacyMode ? "显示金额" : "隐藏金额"}
+        >
+          {privacyMode ? <EyeOff size={20} /> : <Eye size={20} />}
+        </button>
+
+        <button 
+          onClick={onScan}
+          className="w-10 h-10 bg-gray-900 rounded-full flex items-center justify-center shadow-lg text-white hover:bg-black active:scale-95 transition-all"
+          aria-label="AI 识别"
+        >
+          <Camera size={20} />
+        </button>
+      </div>
+    </header>
+  );
+};
+
+interface BottomNavProps {
+  activeTab: 'assets' | 'analysis' | 'ai' | 'me';
+  onChange: (tab: 'assets' | 'analysis' | 'ai' | 'me') => void;
+}
+
+const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onChange }) => {
+  const navItems = [
+    { id: 'assets', label: '资产', icon: Wallet },
+    { id: 'analysis', label: '趋势', icon: TrendingUp },
+    { id: 'ai', label: 'AI', icon: Sparkles },
+    { id: 'me', label: '我的', icon: User },
+  ] as const;
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-lg border-t border-gray-200 pb-safe pt-2 px-6 shadow-lg">
+      <div className="flex justify-between items-center max-w-md mx-auto">
+        {navItems.map((item) => {
+          const isActive = activeTab === item.id;
+          const Icon = item.icon;
+          
+          return (
+            <button
+              key={item.id}
+              onClick={() => onChange(item.id)} // @ts-ignore
+              className={`flex flex-col items-center justify-center w-16 py-1 transition-all duration-300 ${
+                isActive ? 'scale-105' : 'opacity-50 hover:opacity-75'
+              }`}
+            >
+              <div className={`
+                p-1.5 rounded-xl mb-1 transition-colors duration-300
+                ${isActive ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600'}
+              `}>
+                <Icon size={isActive ? 20 : 22} strokeWidth={isActive ? 2.5 : 2} />
+              </div>
+              <span className={`text-[10px] font-bold ${isActive ? 'text-gray-900' : 'text-gray-500'}`}>
+                {item.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 const SmartInput: React.FC<{
   label: string; value: string; onChange: (val: string) => void; suggestions: string[]; placeholder?: string;
@@ -360,13 +447,12 @@ const EarningsCalendar: React.FC<{ asset: Asset; onClose: () => void; }> = ({ as
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const earning = asset.dailyEarnings[dateStr] || 0;
     const deposits = asset.history.filter(t => t.type === 'deposit' && t.date === dateStr).reduce((sum, t) => sum + t.amount, 0);
-    return { earning, deposits };
+    const withdrawals = asset.history.filter(t => t.type === 'withdrawal' && t.date === dateStr).reduce((sum, t) => sum + t.amount, 0);
+    return { earning, deposits, withdrawals };
   };
 
   const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
-  const earningsSymbol = getSymbol(asset.earningsCurrency || asset.currency);
-  const principalSymbol = getSymbol(asset.currency);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
@@ -382,34 +468,37 @@ const EarningsCalendar: React.FC<{ asset: Asset; onClose: () => void; }> = ({ as
             <button onClick={nextMonth} className="p-2 hover:bg-gray-100 rounded-full transition-colors">&gt;</button>
           </div>
           <div className="grid grid-cols-7 gap-1 text-center mb-2">
-            {['日', '一', '二', '三', '四', '五', '六'].map(d => <div key={d} className="text-xs text-gray-400 font-medium">{d}</div>)}
+            {['日', '一', '二', '三', '四', '五', '六'].map(d => (
+              <div key={d} className="text-xs text-gray-400 font-medium">{d}</div>
+            ))}
           </div>
           <div className="grid grid-cols-7 gap-1">
             {days.map((day, idx) => {
               if (!day) return <div key={`empty-${idx}`} />;
-              const { earning, deposits } = getEventsForDay(day);
+              const { earning, deposits, withdrawals } = getEventsForDay(day);
+              
+              const hasEarning = earning !== 0;
+              const hasDeposit = deposits > 0;
+              const hasWithdrawal = withdrawals > 0;
+
               return (
                 <div key={day} className="flex flex-col items-center justify-start pt-1 h-14 rounded-lg bg-gray-50 border border-gray-100 relative overflow-hidden group hover:border-blue-200 transition-colors">
                   <span className="text-[10px] font-medium text-gray-400 mb-0.5 group-hover:text-blue-500">{day}</span>
-                  {earning !== 0 && (
-                     <span className={`text-[9px] font-bold leading-tight tracking-tighter ${earning > 0 ? 'text-red-500' : 'text-green-600'}`}>{earning > 0 ? '' : ''}{Math.abs(earning).toFixed(2)}</span>
+                  {hasEarning && (
+                     <span className={`text-[9px] font-bold leading-tight tracking-tighter ${earning > 0 ? 'text-red-500' : 'text-green-600'}`}>{earning > 0 ? '' : ''}{Math.abs(earning).toFixed(0)}</span>
                   )}
-                  {deposits > 0 && <span className="text-[9px] font-bold text-blue-500 leading-tight tracking-tighter">{deposits.toLocaleString(undefined, {maximumFractionDigits:0})}</span>}
+                  {hasDeposit && <span className="text-[9px] font-bold text-blue-500 leading-tight tracking-tighter">+{deposits.toLocaleString(undefined, {maximumFractionDigits:0})}</span>}
+                  {hasWithdrawal && <span className="text-[9px] font-bold text-orange-500 leading-tight tracking-tighter">-{withdrawals.toLocaleString(undefined, {maximumFractionDigits:0})}</span>}
                 </div>
               );
             })}
           </div>
           
-          <div className="mt-4 flex gap-4 justify-center text-xs text-gray-500 pt-3 border-t border-gray-100">
-             <div className="flex items-center gap-1.5">
-               <span className="w-2 h-2 rounded-full bg-red-500"></span> 收益
-             </div>
-             <div className="flex items-center gap-1.5">
-               <span className="w-2 h-2 rounded-full bg-green-600"></span> 亏损
-             </div>
-             <div className="flex items-center gap-1.5">
-               <span className="w-2 h-2 rounded-full bg-blue-500"></span> 存入
-             </div>
+          <div className="mt-4 flex gap-3 justify-center text-[10px] text-gray-500 pt-3 border-t border-gray-100">
+             <div className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500"></span> 收益</div>
+             <div className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-600"></span> 亏损</div>
+             <div className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> 存入</div>
+             <div className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span> 赎回</div>
           </div>
         </div>
       </div>
@@ -521,18 +610,17 @@ const AuthScreen: React.FC = () => {
   );
 };
 
+// --- AIScanModal ---
 const AIScanModal: React.FC<{
   isOpen: boolean; onClose: () => void; onUpload: () => void; isProcessing: boolean; assets: Asset[]; targetAssetId: string; setTargetAssetId: (id: string) => void;
   manualCurrency: Currency | ''; setManualCurrency: (c: Currency | '') => void; manualInstitution: string; setManualInstitution: (s: string) => void; lastProcessedCount: number;
   manualAmount: string; setManualAmount: (s: string) => void; 
   manualDate: string; setManualDate: (s: string) => void;
   onManualSubmit: () => void;
-  // Update 5: Replace enableManualEntry with mode string
   modalMode: 'global' | 'earning' | 'withdrawal';
 }> = ({ isOpen, onClose, onUpload, isProcessing, assets, targetAssetId, setTargetAssetId, manualCurrency, setManualCurrency, manualInstitution, setManualInstitution, lastProcessedCount, manualAmount, setManualAmount, manualDate, setManualDate, onManualSubmit, modalMode }) => {
   if (!isOpen) return null;
 
-  // Dynamic Content based on mode
   const getTitle = () => {
     if (modalMode === 'withdrawal') return '赎回录入';
     if (modalMode === 'earning') return '收益录入明细';
@@ -653,9 +741,9 @@ const AIScanModal: React.FC<{
   );
 };
 
-// Update 6: Add Withdrawal Button to AssetItem and Handle 'withdrawal' type in list
+// --- AssetItem & Modals ---
 const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) => void; onDeleteTransaction: (txId: string) => void; onDelete: (id: string) => void; onEditInfo: () => void; 
-  onDirectAIScan: (mode: 'earning' | 'withdrawal') => void; // Update function signature
+  onDirectAIScan: (mode: 'earning' | 'withdrawal') => void; 
 }> = ({ asset, onEditTransaction, onDeleteTransaction, onDelete, onEditInfo, onDirectAIScan }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -666,7 +754,6 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
   
   const totalEarningsInBase = convertCurrency(asset.totalEarnings, earningsCurrency, asset.currency);
   const principal = asset.currentAmount - totalEarningsInBase;
-  
   const holdingYield = principal > 0 ? (totalEarningsInBase / principal) * 100 : 0;
   
   const today = new Date();
@@ -699,9 +786,7 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
                 asset.type === AssetType.GOLD ? 'bg-gradient-to-br from-yellow-400 to-yellow-600' : 
                 'bg-gradient-to-br from-purple-400 to-purple-600'
             }`}>
-              {asset.type === AssetType.FUND ? '基' : 
-               asset.type === AssetType.STOCK ? '股' : 
-               asset.type === AssetType.GOLD ? '金' : '其'}
+              {asset.type === AssetType.FUND ? '基' : asset.type === AssetType.STOCK ? '股' : asset.type === AssetType.GOLD ? '金' : '其'}
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="font-bold text-gray-800 text-base break-words leading-tight">{asset.productName}</h3>
@@ -725,7 +810,6 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5"><History size={14} /> 资金明细</h4>
               <div className="flex items-center gap-2">
                   <button onClick={(e) => { e.stopPropagation(); onDirectAIScan('earning'); }} className="text-xs bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-full text-indigo-600 flex items-center gap-1.5 hover:bg-indigo-100 font-bold shadow-sm transition-colors"><Sparkles size={12} /> 收益录入</button>
-                  {/* 新增：赎回按钮 */}
                   <button onClick={(e) => { e.stopPropagation(); onDirectAIScan('withdrawal'); }} className="text-xs bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-full text-orange-600 flex items-center gap-1.5 hover:bg-orange-100 font-bold shadow-sm transition-colors"><ArrowUpRight size={12} /> 赎回</button>
                   <button onClick={(e) => { e.stopPropagation(); setShowCalendar(true); }} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded-full text-gray-600 flex items-center gap-1.5 hover:bg-gray-100 font-medium shadow-sm transition-colors"><Calendar size={14} className="text-blue-500"/> 查看日历</button>
               </div>
@@ -745,7 +829,7 @@ const AssetItem: React.FC<{ asset: Asset; onEditTransaction: (tx: Transaction) =
                     textColorClass = 'text-blue-500';
                     dotColorClass = 'bg-blue-500';
                   } else if (isWithdrawal) {
-                    textColorClass = 'text-orange-500'; // Orange for withdrawal
+                    textColorClass = 'text-orange-500';
                     dotColorClass = 'bg-orange-500';
                   } else {
                     textColorClass = isPositiveEarning ? 'text-red-500' : 'text-green-600';
@@ -834,52 +918,245 @@ const EditAssetInfoModal: React.FC<{ asset: Asset; onSave: (asset: Asset) => voi
   );
 };
 
-const UserProfileModal: React.FC<{ user: User; onClose: () => void; onLogout: () => void; }> = ({ user, onClose, onLogout }) => {
+// --- PAGES ---
+
+interface AssetsPageProps {
+  assets: Asset[];
+  dashboardCurrency: Currency;
+  setDashboardCurrency: React.Dispatch<React.SetStateAction<Currency>>;
+  onOpenAdd: () => void;
+  onOpenScan: (mode: 'global' | 'earning' | 'withdrawal') => void;
+  onEditAsset: (asset: Asset) => void;
+  onDeleteAsset: (id: string) => void;
+  onEditTransaction: (assetId: string, tx: Transaction) => void;
+  onDeleteTransaction: (assetId: string, txId: string) => void;
+  privacyMode: boolean;
+}
+
+const AssetsPage: React.FC<AssetsPageProps> = ({ 
+  assets, dashboardCurrency, setDashboardCurrency, 
+  onOpenAdd, onOpenScan, onEditAsset, onDeleteAsset, 
+  onEditTransaction, onDeleteTransaction, privacyMode 
+}) => {
+  const totalAssets = assets.reduce((sum, a) => sum + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0);
+  const totalEarnings = assets.reduce((sum, a) => sum + convertCurrency(a.totalEarnings, a.earningsCurrency || a.currency, dashboardCurrency), 0);
+  const totalPrincipal = totalAssets - totalEarnings;
+  const totalYield = totalPrincipal > 0 ? (totalEarnings / totalPrincipal) * 100 : 0;
+  const allDates = assets.flatMap(a => a.history.map(t => t.date));
+  const minDate = allDates.length > 0 ? allDates.reduce((min, d) => d < min ? d : min, allDates[0]) : null;
+  const daysInvested = minDate ? Math.max(0, Math.floor((new Date().getTime() - new Date(minDate).getTime()) / (1000 * 60 * 60 * 24))) : 0;
+
+  let annualizedYield = 0;
+  if (totalPrincipal > 0 && daysInvested > 7) {
+      const growthRatio = totalAssets / totalPrincipal;
+      const yearRatio = 365 / daysInvested;
+      annualizedYield = (Math.pow(growthRatio, yearRatio) - 1) * 100;
+  }
+
+  const chartData = [
+    { name: '基金', value: assets.filter(a => a.type === AssetType.FUND).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
+    { name: '股票', value: assets.filter(a => a.type === AssetType.STOCK).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
+    { name: '黄金', value: assets.filter(a => a.type === AssetType.GOLD).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
+    { name: '其他', value: assets.filter(a => a.type === AssetType.OTHER).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
+  ].filter(d => d.value > 0);
+
+  const assetsByInstitution = useMemo(() => {
+    return assets.reduce((groups, asset) => {
+      const key = asset.institution || '其他';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(asset);
+      return groups;
+    }, {} as Record<string, Asset[]>);
+  }, [assets]);
+
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
-      <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-scaleIn">
-        <div className="flex flex-col items-center mb-6">
-          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4"><UserCircle size={48} className="text-gray-400" /></div>
-          <h3 className="font-bold text-lg text-gray-800">当前账号</h3>
-          <p className="text-sm text-gray-500 font-mono mt-1 text-center truncate w-full px-4">{user.isAnonymous ? "匿名用户 (数据仅在本地/当前会话有效)" : user.email || user.uid}</p>
+    <div className="pb-8">
+      {/* Dashboard Card */}
+      <div className="mx-4 sm:mx-6 mb-6">
+        <div className="bg-gradient-to-br from-gray-800 to-black text-white rounded-2xl p-6 shadow-xl relative overflow-hidden transition-all duration-500">
+           <div className="flex justify-between items-center relative z-10">
+              <div>
+                 <div className="flex items-center gap-2 mb-1">
+                   <p className="text-gray-400 text-xs font-medium tracking-wide">总资产估值</p>
+                   <button onClick={() => setDashboardCurrency(curr => curr === 'CNY' ? 'USD' : curr === 'USD' ? 'HKD' : 'CNY')} className="text-[10px] font-bold bg-white/10 px-1.5 py-0.5 rounded text-gray-300 hover:bg-white/20 transition flex items-center gap-0.5">{dashboardCurrency} <RefreshCw size={8} /></button>
+                 </div>
+                 <h2 className="text-3xl sm:text-4xl font-bold mb-4 font-mono tracking-tight animate-fadeIn">
+                   {dashboardCurrency === 'USD' ? '$' : dashboardCurrency === 'HKD' ? 'HK$' : '¥'} 
+                   {privacyMode ? '****' : totalAssets.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                 </h2>
+                 <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
+                    <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
+                        <TrendingUp size={14} className="text-red-400" />
+                        <div>
+                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">累计收益</p>
+                            <p className="text-sm font-bold leading-none">{privacyMode ? '***' : (totalEarnings > 0 ? '+' : '') + totalEarnings.toLocaleString(undefined, {minimumFractionDigits: 0})}</p>
+                        </div>
+                    </div>
+                    <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
+                        <Percent size={14} className="text-yellow-400" />
+                        <div>
+                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">持有收益率</p>
+                            <p className={`text-sm font-bold leading-none ${totalYield >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                                {totalYield >= 0 ? '+' : ''}{totalYield.toFixed(2)}%
+                            </p>
+                        </div>
+                    </div>
+                    <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
+                        <Clock size={14} className="text-blue-400" />
+                        <div>
+                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">投资时长</p>
+                            <p className="text-sm font-bold leading-none text-white">
+                                {daysInvested} 天
+                            </p>
+                        </div>
+                    </div>
+                    <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
+                        <BarChart4 size={14} className="text-purple-400" />
+                        <div>
+                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">推测年化</p>
+                            <p className={`text-sm font-bold leading-none ${annualizedYield >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                                {daysInvested > 7 ? (annualizedYield >= 0 ? '+' : '') + annualizedYield.toFixed(2) + '%' : '--'}
+                            </p>
+                        </div>
+                    </div>
+                 </div>
+              </div>
+              <div className="hidden sm:block w-32 h-32 relative"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={chartData} innerRadius="60%" outerRadius="100%" paddingAngle={5} dataKey="value" stroke="none">{chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie></PieChart></ResponsiveContainer></div>
+           </div>
         </div>
-        <div className="space-y-3">
-          <button onClick={onLogout} className="w-full py-3.5 bg-red-50 text-red-500 font-bold text-sm rounded-xl flex items-center justify-center gap-2 hover:bg-red-100 transition"><LogOut size={16} /> 退出登录</button>
-          <button onClick={onClose} className="w-full py-3.5 bg-gray-50 text-gray-600 font-bold text-sm rounded-xl hover:bg-gray-100 transition">关闭</button>
+      </div>
+
+      <div className="px-4 sm:px-6 space-y-5">
+         {Object.keys(assetsByInstitution).length === 0 ? 
+           <div className="text-center py-16">
+             <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4"><Wallet className="text-gray-300" size={32} /></div>
+             <p className="text-gray-400 text-sm">暂无资产，点击下方按钮开始记录</p>
+           </div> : 
+           Object.entries(assetsByInstitution).map(([institution, instAssets]) => (
+             <div key={institution} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden animate-slideUp">
+                <div className="bg-[#ededed]/50 px-5 py-3 border-b border-gray-100 flex items-center justify-between"><div className="flex items-center gap-2"><div className="w-1 h-4 bg-gray-800 rounded-full"></div><h3 className="font-bold text-gray-700 text-sm">{institution}</h3></div></div>
+                <div className="divide-y divide-gray-50">
+                  {instAssets.map(asset => (
+                    <AssetItem 
+                      key={asset.id} 
+                      asset={asset} 
+                      onEditTransaction={(tx) => onEditTransaction(asset.id, tx)} 
+                      onDeleteTransaction={(txId) => onDeleteTransaction(asset.id, txId)} 
+                      onDelete={onDeleteAsset} 
+                      onEditInfo={() => onEditAsset(asset)} 
+                      onDirectAIScan={onOpenScan} 
+                    />
+                  ))}
+                </div>
+             </div>
+           ))
+         }
+      </div>
+
+      <div className="fixed bottom-24 left-0 right-0 flex justify-center z-40 pointer-events-none">
+        <div className="pointer-events-auto bg-gray-900 text-white rounded-full shadow-2xl flex items-center p-1.5 px-6 gap-0 backdrop-blur-xl bg-opacity-95 hover:scale-105 transition duration-200">
+          <button onClick={onOpenAdd} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70">
+            <Plus size={18} className="text-blue-400" /> <span>记一笔</span>
+          </button>
+          <div className="w-px h-5 bg-gray-700 mx-1"></div>
+          <button onClick={() => onOpenScan('global')} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70">
+            <Camera size={18} className="text-blue-400" /> <span>AI 识别</span>
+          </button>
         </div>
       </div>
     </div>
   );
 };
 
-/**
- * --- MAIN APP ---
- */
+const AnalysisPage = () => {
+  return (
+    <div className="flex flex-col items-center justify-center h-[60vh] text-center px-6">
+      <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-6">
+        <span className="text-4xl">📈</span>
+      </div>
+      <h2 className="text-xl font-bold text-gray-800 mb-2">资产趋势分析</h2>
+      <p className="text-gray-500 text-sm">这里将展示您的净值走势图、收益热力图和资产配置建议。</p>
+      <div className="mt-8 p-4 bg-yellow-50 rounded-xl border border-yellow-100 text-yellow-700 text-xs font-bold">
+        🚧 功能开发中
+      </div>
+    </div>
+  );
+};
+
+const AILabPage = () => {
+  return (
+    <div className="flex flex-col items-center justify-center h-[60vh] text-center px-6">
+      <div className="w-20 h-20 bg-purple-50 rounded-full flex items-center justify-center mb-6 animate-pulse">
+        <span className="text-4xl">🤖</span>
+      </div>
+      <h2 className="text-xl font-bold text-gray-800 mb-2">AI 实验室</h2>
+      <p className="text-gray-500 text-sm">Gemini 智能顾问即将上线。<br/>支持自然语言查账、持仓风险诊断等高级功能。</p>
+    </div>
+  );
+};
+
+const ProfilePage: React.FC<{ user: User; onLogout: () => void; }> = ({ user, onLogout }) => {
+  return (
+    <div className="px-6 pt-4">
+      <div className="bg-white rounded-2xl p-6 shadow-sm mb-6 flex items-center gap-4">
+        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
+          <UserCircle size={32} className="text-gray-400" />
+        </div>
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">当前用户</h2>
+          <p className="text-xs text-gray-500 font-mono mt-1">{user?.isAnonymous ? '匿名用户' : user?.email}</p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <button className="w-full bg-white p-4 rounded-xl flex items-center gap-3 shadow-sm active:scale-95 transition-all">
+          <Settings size={20} className="text-gray-600" />
+          <span className="text-sm font-bold text-gray-700">通用设置</span>
+        </button>
+        <button className="w-full bg-white p-4 rounded-xl flex items-center gap-3 shadow-sm active:scale-95 transition-all">
+          <Shield size={20} className="text-gray-600" />
+          <span className="text-sm font-bold text-gray-700">隐私与安全</span>
+        </button>
+        <button onClick={onLogout} className="w-full bg-red-50 p-4 rounded-xl flex items-center gap-3 shadow-sm active:scale-95 transition-all mt-8">
+          <LogOut size={20} className="text-red-500" />
+          <span className="text-sm font-bold text-red-500">退出登录</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// --- APP COMPONENT ---
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [assets, setAssets] = useState<Asset[]>([]);
+  
+  const [activeTab, setActiveTab] = useState<'assets' | 'analysis' | 'ai' | 'me'>('assets');
+  const [privacyMode, setPrivacyMode] = useState(false);
+  const [dashboardCurrency, setDashboardCurrency] = useState<Currency>('CNY');
+
+  // Modal Control
   const [showAddModal, setShowAddModal] = useState(false);
   const [showScanModal, setShowScanModal] = useState(false);
-  const [scanTargetId, setScanTargetId] = useState<string>('auto'); 
+  const [scanTargetId, setScanTargetId] = useState<string>('auto');
   const [manualInstitution, setManualInstitution] = useState('');
   const [manualCurrency, setManualCurrency] = useState<Currency | ''>('');
-  const [manualAmount, setManualAmount] = useState(''); 
-  const [manualDate, setManualDate] = useState<string>(new Date().toISOString().split('T')[0]); 
-  
-  // Update 7: modalMode state to handle global, earning, and withdrawal modes
+  const [manualAmount, setManualAmount] = useState('');
+  const [manualDate, setManualDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [modalMode, setModalMode] = useState<'global' | 'earning' | 'withdrawal'>('global');
-
-  const [showGuide, setShowGuide] = useState(false);
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [isProcessingAI, setIsProcessingAI] = useState(false);
   const [lastProcessedCount, setLastProcessedCount] = useState(0);
-  const [dashboardCurrency, setDashboardCurrency] = useState<Currency>('CNY');
+  const [isProcessingAI, setIsProcessingAI] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Edit Modals
   const [editingTransaction, setEditingTransaction] = useState<{ assetId: string, transaction: Transaction } | null>(null);
   const [editingAssetInfo, setEditingAssetInfo] = useState<Asset | null>(null);
   const [confirmDeleteAssetId, setConfirmDeleteAssetId] = useState<string | null>(null);
-  const [newAsset, setNewAsset] = useState<{ institution: string; productName: string; type: AssetType; currency: Currency; amount: string; date: string; yield: string; remark: string; }>({ institution: '', productName: '', type: AssetType.FUND, currency: 'CNY', amount: '', date: new Date().toISOString().split('T')[0], yield: '', remark: '' });
+  
+  // Add Asset Form
+  const [newAsset, setNewAsset] = useState({ institution: '', productName: '', type: AssetType.FUND, currency: 'CNY', amount: '', date: new Date().toISOString().split('T')[0], yield: '', remark: '' });
 
   // Auth & Data
   useEffect(() => {
@@ -912,43 +1189,7 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // --- Derived State & Calculations ---
-  const totalAssets = assets.reduce((sum, a) => sum + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0);
-  const totalEarnings = assets.reduce((sum, a) => sum + convertCurrency(a.totalEarnings, a.earningsCurrency || a.currency, dashboardCurrency), 0);
-  
-  const totalPrincipal = totalAssets - totalEarnings;
-  const totalYield = totalPrincipal > 0 ? (totalEarnings / totalPrincipal) * 100 : 0;
-
-  const allDates = assets.flatMap(a => a.history.map(t => t.date));
-  const minDate = allDates.length > 0 ? allDates.reduce((min, d) => d < min ? d : min, allDates[0]) : null;
-  const daysInvested = minDate ? Math.max(0, Math.floor((new Date().getTime() - new Date(minDate).getTime()) / (1000 * 60 * 60 * 24))) : 0;
-
-  let annualizedYield = 0;
-  if (totalPrincipal > 0 && daysInvested > 7) {
-      const growthRatio = totalAssets / totalPrincipal; // e.g. 1.05
-      const yearRatio = 365 / daysInvested; // e.g. 2.0 (if invested for 6 months)
-      annualizedYield = (Math.pow(growthRatio, yearRatio) - 1) * 100;
-  }
-
-  const chartData = [
-    { name: '基金', value: assets.filter(a => a.type === AssetType.FUND).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
-    { name: '股票', value: assets.filter(a => a.type === AssetType.STOCK).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
-    { name: '黄金', value: assets.filter(a => a.type === AssetType.GOLD).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
-    { name: '其他', value: assets.filter(a => a.type === AssetType.OTHER).reduce((s, a) => s + convertCurrency(a.currentAmount, a.currency, dashboardCurrency), 0) },
-  ].filter(d => d.value > 0);
-
-  const assetsByInstitution = useMemo(() => {
-    return assets.reduce((groups, asset) => {
-      const key = asset.institution || '其他';
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(asset);
-      return groups;
-    }, {} as Record<string, Asset[]>);
-  }, [assets]);
-
   // Handlers
-
-  // 手动处理收益/赎回录入
   const handleManualEarningSubmit = async () => {
     if (!manualAmount || !user) return;
     const amt = parseFloat(manualAmount);
@@ -965,7 +1206,6 @@ export default function App() {
     const asset = assets.find(a => a.id === scanTargetId);
     if (!asset) return;
 
-    // Update 8: Create transaction based on modalMode
     const newTx: Transaction = {
       id: Date.now().toString(),
       date: manualDate, 
@@ -1030,7 +1270,6 @@ export default function App() {
          let targetId = scanTargetId !== 'auto' ? scanTargetId : findMatchingAsset(assets, group.product, manualInstitution || group.inst, group.currency)?.id;
          
          const newTx: Transaction[] = group.records.filter(r => r.amount).map(r => {
-            // Update 9: Logic to handle AI detected types or enforce withdrawal if in withdrawal mode
             let txType = r.type;
             let desc = '';
             
@@ -1093,6 +1332,7 @@ export default function App() {
      if (!newAsset.productName || !newAsset.amount || !user) return;
      const amt = parseFloat(newAsset.amount);
      const tx: Transaction = { id: Date.now().toString(), date: newAsset.date, type: 'deposit', amount: amt, currency: newAsset.currency, description: newAsset.remark || '手动记录' };
+     
      const existing = assets.find(a => a.institution === newAsset.institution && a.productName === newAsset.productName && a.currency === newAsset.currency);
      
      if (existing) {
@@ -1106,48 +1346,33 @@ export default function App() {
      setShowAddModal(false);
   };
 
-  const handleUpdateTransaction = async (updatedTx: Transaction) => {
-    if (!editingTransaction || !user) return;
-    const asset = assets.find(a => a.id === editingTransaction.assetId);
-    if (!asset) return;
-    const newHistory = asset.history.map(tx => tx.id === updatedTx.id ? updatedTx : tx);
-    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', asset.id), { history: newHistory });
-    setEditingTransaction(null);
+  const handleEditAsset = async (asset: Asset) => {
+    if (!user) return;
+    const { id, currentAmount, totalEarnings, dailyEarnings, history, ...rest } = asset;
+    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', id), rest);
   };
 
-  const handleDeleteTransaction = async (txId: string) => {
-    if (!editingTransaction || !user) return;
-    const asset = assets.find(a => a.id === editingTransaction.assetId);
-    if (!asset) return;
-    const newHistory = asset.history.filter(tx => tx.id !== txId);
-    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', asset.id), { history: newHistory });
-    setEditingTransaction(null);
+  const handleDeleteAsset = async (id: string) => {
+    if (!user) return;
+    await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', id));
   };
 
-  const handleDeleteSpecificTransaction = async (assetId: string, txId: string) => {
+  const handleEditTransaction = async (assetId: string, tx: Transaction) => {
     if (!user) return;
     const asset = assets.find(a => a.id === assetId);
     if (!asset) return;
-    const newHistory = asset.history.filter(tx => tx.id !== txId);
+    const newHistory = asset.history.map(h => h.id === tx.id ? tx : h);
     await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', assetId), { history: newHistory });
     setEditingTransaction(null);
   };
 
-  const handleSaveAssetInfo = async (updatedAsset: Asset) => {
+  const handleDeleteTransaction = async (assetId: string, txId: string) => {
     if (!user) return;
-    const { id, currentAmount, totalEarnings, dailyEarnings, history, ...rest } = updatedAsset;
-    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', id), rest);
-    setEditingAssetInfo(null);
-  };
-
-  const handleDeleteAssetRequest = (id: string) => {
-    setConfirmDeleteAssetId(id);
-  };
-
-  const executeDeleteAsset = async () => {
-    if (!confirmDeleteAssetId || !user) return;
-    await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', confirmDeleteAssetId));
-    setConfirmDeleteAssetId(null);
+    const asset = assets.find(a => a.id === assetId);
+    if (!asset) return;
+    const newHistory = asset.history.filter(h => h.id !== txId);
+    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', assetId), { history: newHistory });
+    setEditingTransaction(null);
   };
 
   if (authLoading) return <div className="min-h-screen flex items-center justify-center bg-[#ededed]"><Loader2 className="animate-spin text-gray-400" size={32} /></div>;
@@ -1156,73 +1381,78 @@ export default function App() {
     return <AuthScreen />;
   }
 
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'assets':
+        return (
+          <AssetsPage 
+            assets={assets}
+            dashboardCurrency={dashboardCurrency}
+            setDashboardCurrency={setDashboardCurrency}
+            privacyMode={privacyMode}
+            onOpenAdd={() => setShowAddModal(true)}
+            onOpenScan={(mode) => {
+              setScanTargetId('auto');
+              setManualInstitution('');
+              setManualCurrency('');
+              setManualAmount('');
+              setManualDate(new Date().toISOString().split('T')[0]);
+              setModalMode(mode);
+              setShowScanModal(true);
+              setLastProcessedCount(0);
+            }}
+            onEditAsset={handleEditAsset}
+            onDeleteAsset={(id) => setConfirmDeleteAssetId(id)}
+            onEditTransaction={(assetId, tx) => setEditingTransaction({ assetId, transaction: tx })}
+            onDeleteTransaction={(assetId, txId) => handleDeleteTransaction(assetId, txId)}
+          />
+        );
+      case 'analysis':
+        return <AnalysisPage />;
+      case 'ai':
+        return <AILabPage />;
+      case 'me':
+        return <ProfilePage user={user} onLogout={() => signOut(auth)} />;
+      default:
+        return null;
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#ededed] text-[#111111] pb-32 font-sans">
+    <div className="min-h-screen bg-[#ededed] text-[#111111] font-sans">
       <input type="file" multiple accept="image/*" ref={fileInputRef} onChange={handleAIUpload} className="hidden" />
-      <div className="px-6 pt-8 pb-4 flex justify-between items-center bg-white sticky top-0 z-30 shadow-sm sm:hidden"><h1 className="text-lg font-bold">我的资产</h1><div className="flex items-center gap-3"><button onClick={() => setShowProfileModal(true)}><UserCircle size={24} className="text-gray-600" /></button></div></div>
-      <div className="hidden sm:flex px-6 pt-10 pb-4 justify-between items-center"><h1 className="text-2xl font-bold text-gray-800">资产管家</h1><div className="flex items-center gap-4"><button onClick={() => setShowGuide(true)}><HelpCircle size={24} className="text-[#888888]" /></button><button onClick={() => setShowProfileModal(true)} className="bg-gray-100 p-2 rounded-full hover:bg-gray-200 transition"><UserCircle size={24} className="text-gray-600" /></button></div></div>
+      
+      {activeTab === 'assets' && (
+        <TopNavBar 
+          title="我的资产" 
+          privacyMode={privacyMode}
+          onTogglePrivacy={() => setPrivacyMode(!privacyMode)}
+          onScan={() => {
+             setScanTargetId('auto');
+             setManualInstitution('');
+             setManualCurrency('');
+             setManualAmount('');
+             setManualDate(new Date().toISOString().split('T')[0]);
+             setModalMode('global');
+             setShowScanModal(true);
+             setLastProcessedCount(0);
+          }}
+        />
+      )}
+      
+      {activeTab !== 'assets' && (
+         <header className="sticky top-0 z-40 bg-[#ededed]/90 backdrop-blur-md px-6 pt-12 pb-4">
+            <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight leading-none">
+              {activeTab === 'analysis' ? '趋势分析' : activeTab === 'ai' ? 'AI 实验室' : '个人中心'}
+            </h1>
+         </header>
+      )}
 
-      <div className="mx-4 sm:mx-6 mb-6">
-        <div className="bg-gradient-to-br from-gray-800 to-black text-white rounded-2xl p-6 shadow-xl relative overflow-hidden transition-all duration-500">
-           <div className="flex justify-between items-center relative z-10">
-              <div>
-                 <div className="flex items-center gap-2 mb-1"><p className="text-gray-400 text-xs font-medium tracking-wide">总资产估值</p><button onClick={() => setDashboardCurrency(curr => curr === 'CNY' ? 'USD' : curr === 'USD' ? 'HKD' : 'CNY')} className="text-[10px] font-bold bg-white/10 px-1.5 py-0.5 rounded text-gray-300 hover:bg-white/20 transition flex items-center gap-0.5">{dashboardCurrency} <RefreshCw size={8} /></button></div>
-                 <h2 className="text-3xl sm:text-4xl font-bold mb-4 font-mono tracking-tight animate-fadeIn">{dashboardCurrency === 'USD' ? '$' : dashboardCurrency === 'HKD' ? 'HK$' : '¥'} {totalAssets.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</h2>
-                 <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
-                    <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
-                        <TrendingUp size={14} className="text-red-400" />
-                        <div>
-                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">累计收益 ({dashboardCurrency})</p>
-                            <p className="text-sm font-bold leading-none">{totalEarnings > 0 ? '+' : ''}{totalEarnings.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
-                        </div>
-                    </div>
-                    <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
-                        <Percent size={14} className="text-yellow-400" />
-                        <div>
-                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">持有收益率</p>
-                            <p className={`text-sm font-bold leading-none ${totalYield >= 0 ? 'text-red-400' : 'text-green-400'}`}>
-                                {totalYield >= 0 ? '+' : ''}{totalYield.toFixed(2)}%
-                            </p>
-                        </div>
-                    </div>
-                    <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
-                        <Clock size={14} className="text-blue-400" />
-                        <div>
-                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">投资时长</p>
-                            <p className="text-sm font-bold leading-none text-white">
-                                {daysInvested} 天
-                            </p>
-                        </div>
-                    </div>
-                    <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
-                        <BarChart4 size={14} className="text-purple-400" />
-                        <div>
-                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">推测年化</p>
-                            <p className={`text-sm font-bold leading-none ${annualizedYield >= 0 ? 'text-red-400' : 'text-green-400'}`}>
-                                {daysInvested > 7 ? (annualizedYield >= 0 ? '+' : '') + annualizedYield.toFixed(2) + '%' : '--'}
-                            </p>
-                        </div>
-                    </div>
-                 </div>
-              </div>
-              <div className="hidden sm:block w-32 h-32 relative"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={chartData} innerRadius="60%" outerRadius="100%" paddingAngle={5} dataKey="value" stroke="none">{chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie></PieChart></ResponsiveContainer></div>
-           </div>
-        </div>
-      </div>
+      <main className="pb-24 pt-4">
+        {renderContent()}
+      </main>
 
-      <div className="px-4 sm:px-6 space-y-5">
-         {Object.keys(assetsByInstitution).length === 0 ? <div className="text-center py-16"><div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4"><Wallet className="text-gray-300" size={32} /></div><p className="text-gray-400 text-sm">暂无资产，点击下方按钮开始记录</p></div> : 
-           Object.entries(assetsByInstitution).map(([institution, instAssets]) => (
-             <div key={institution} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="bg-[#ededed]/50 px-5 py-3 border-b border-gray-100 flex items-center justify-between"><div className="flex items-center gap-2"><div className="w-1 h-4 bg-gray-800 rounded-full"></div><h3 className="font-bold text-gray-700 text-sm">{institution}</h3></div></div>
-                {/* Update 10: Pass withdrawal mode to onDirectAIScan */}
-                <div className="divide-y divide-gray-50">{instAssets.map(asset => <AssetItem key={asset.id} asset={asset} onEditTransaction={(tx) => setEditingTransaction({ assetId: asset.id, transaction: tx })} onDeleteTransaction={(txId) => handleDeleteSpecificTransaction(asset.id, txId)} onDelete={handleDeleteAssetRequest} onEditInfo={() => setEditingAssetInfo(asset)} onDirectAIScan={(mode) => { setScanTargetId(asset.id); setManualCurrency(asset.earningsCurrency || asset.currency); setManualAmount(''); setManualDate(new Date().toISOString().split('T')[0]); setModalMode(mode); setShowScanModal(true); setLastProcessedCount(0); }} />)}</div>
-             </div>
-           ))
-         }
-      </div>
-
-      <div className="fixed bottom-8 left-0 right-0 flex justify-center z-40 pointer-events-none"><div className="pointer-events-auto bg-gray-900 text-white rounded-full shadow-2xl flex items-center p-1.5 px-6 gap-0 backdrop-blur-xl bg-opacity-95 hover:scale-105 transition duration-200"><button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70"><Plus size={18} className="text-blue-400" /> <span>记一笔</span></button><div className="w-px h-5 bg-gray-700 mx-1"></div><button onClick={() => { setScanTargetId('auto'); setManualInstitution(''); setManualCurrency(''); setManualAmount(''); setManualDate(new Date().toISOString().split('T')[0]); setModalMode('global'); setShowScanModal(true); setLastProcessedCount(0); }} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70"><Camera size={18} className="text-blue-400" /> <span>AI 识别</span></button></div></div>
+      <BottomNav activeTab={activeTab} onChange={setActiveTab} />
 
       <AIScanModal 
         isOpen={showScanModal} 
@@ -1242,34 +1472,28 @@ export default function App() {
         manualDate={manualDate} 
         setManualDate={setManualDate}
         onManualSubmit={handleManualEarningSubmit}
-        modalMode={modalMode} // Pass modalMode
+        modalMode={modalMode} 
       />
       
       {showAddModal && <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn"><div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-slideUp"><h2 className="text-xl font-bold mb-6 text-gray-800 text-center">记录新资产</h2><div className="space-y-4">
-      {/* 统一高度修改：SmartInput */}
       <SmartInput label="投资渠道" placeholder="例如：支付宝" value={newAsset.institution} onChange={(v) => setNewAsset({...newAsset, institution: v})} suggestions={['支付宝', '微信理财通', '招商银行', '工商银行']} />
       <SmartInput label="产品名称" placeholder="例如：易方达蓝筹" value={newAsset.productName} onChange={(v) => setNewAsset({...newAsset, productName: v})} suggestions={getUniqueProductNames(assets)} />
       <div className="grid grid-cols-2 gap-4">
         <div><label className="block text-gray-500 text-xs font-bold mb-1.5">记录日期</label>
-        {/* 统一高度修改：h-12 */}
         <input type="date" className="w-full bg-gray-50 border border-gray-200 rounded-xl h-12 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={newAsset.date} onChange={(e) => setNewAsset({...newAsset, date: e.target.value})} /></div>
         <div><label className="block text-gray-500 text-xs font-bold mb-1.5">资产类型</label>
-        {/* 统一高度修改：h-12 */}
         <select className="w-full bg-gray-50 border border-gray-200 rounded-xl h-12 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 transition-all appearance-none" value={newAsset.type} onChange={(e) => setNewAsset({...newAsset, type: e.target.value as AssetType})}><option value={AssetType.FUND}>基金</option><option value={AssetType.STOCK}>股票</option><option value={AssetType.GOLD}>黄金</option><option value={AssetType.OTHER}>其他</option></select></div></div>
         <div className="grid grid-cols-2 gap-4">
           <div><label className="block text-gray-500 text-xs font-bold mb-1.5">货币种类</label>
-          {/* 统一高度修改：h-12 */}
           <select className="w-full bg-gray-50 border border-gray-200 rounded-xl h-12 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 transition-all appearance-none" value={newAsset.currency} onChange={(e) => setNewAsset({...newAsset, currency: e.target.value as Currency})}><option value="CNY">CNY</option><option value="USD">USD</option><option value="HKD">HKD</option></select></div>
           <div><label className="block text-gray-500 text-xs font-bold mb-1.5">金额</label>
-          {/* 统一高度修改：h-12，移除了 py-3 以避免高度撑开 */}
           <input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl h-12 px-3 text-lg font-bold text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="0.00" value={newAsset.amount} onChange={(e) => setNewAsset({...newAsset, amount: e.target.value})} /></div></div>
           <div className="flex gap-4">
             <div className="flex-1"><label className="block text-gray-500 text-xs font-bold mb-1.5">年化 (%)</label>
-            {/* 统一高度修改：h-12 */}
             <input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl h-12 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="2.5" value={newAsset.yield} onChange={(e) => setNewAsset({...newAsset, yield: e.target.value})} /></div>
             <div className="flex-[2]"><label className="block text-gray-500 text-xs font-bold mb-1.5">备注</label>
-            {/* 统一高度修改：h-12 */}
             <input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl h-12 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="选填" value={newAsset.remark} onChange={(e) => setNewAsset({...newAsset, remark: e.target.value})} /></div></div><div className="flex gap-3 mt-8"><button onClick={() => setShowAddModal(false)} className="flex-1 py-3.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-sm hover:bg-gray-200 transition-colors">取消</button><button onClick={handleAddAsset} className="flex-1 py-3.5 rounded-xl bg-gray-900 text-white font-bold text-sm shadow-lg hover:bg-black transition-colors">确认</button></div></div></div></div>}
+      
       {editingAssetInfo && <EditAssetInfoModal asset={editingAssetInfo} onSave={handleSaveAssetInfo} onClose={() => setEditingAssetInfo(null)} />}
       {editingTransaction && <EditTransactionModal transaction={editingTransaction.transaction} onSave={handleUpdateTransaction} onDelete={() => handleDeleteTransaction(editingTransaction.transaction.id)} onClose={() => setEditingTransaction(null)} />}
       {confirmDeleteAssetId && <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn"><div className="bg-white w-full max-w-xs rounded-2xl p-6 shadow-2xl"><div className="flex flex-col items-center text-center mb-6"><div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4"><AlertTriangle size={24} className="text-red-500" /></div><h3 className="text-lg font-bold text-gray-800">确认删除该资产？</h3><p className="text-sm text-gray-500 mt-2">删除后，该资产的所有历史记录和收益明细将无法恢复。</p></div><div className="flex gap-3"><button onClick={() => setConfirmDeleteAssetId(null)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm">取消</button><button onClick={executeDeleteAsset} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold text-sm">确认删除</button></div></div></div>}
