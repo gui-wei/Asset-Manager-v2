@@ -2,11 +2,14 @@ import React, { useState, useMemo } from 'react';
 import { 
   TrendingUp, Percent, Clock, BarChart4, Wallet, 
   History, Sparkles, Calendar, Pencil, Trash2, Settings,
-  Plus, Camera, ArrowUpRight, LogOut
+  Plus, Camera, ArrowUpRight, LogOut, RefreshCw
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Asset, Transaction, AssetType, Currency } from '../types'; // 假设 types 在上一级目录
-import EarningsCalendar from '../components/EarningsCalendar';
+
+// [FIX] 使用相对路径 ../../ 替代 @/，确保向上两级找到根目录文件
+import { Asset, Transaction, AssetType, Currency } from '../../types'; 
+// [FIX] 使用相对路径 ../../ 替代 @/
+import EarningsCalendar from '../../components/EarningsCalendar';
 
 // --- 辅助函数 ---
 const RATES: Record<Currency, number> = { CNY: 1, USD: 7.2, HKD: 0.92 };
