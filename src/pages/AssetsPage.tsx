@@ -6,10 +6,9 @@ import {
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
-// [FIX] 使用配置好的 @ 别名，直接指向根目录
-// 这样可以避免相对路径 ../../ 在不同构建环境下解析层级出错的问题
-import { Asset, Transaction, AssetType, Currency } from '@/types'; 
-import EarningsCalendar from '@/components/EarningsCalendar';
+// [FIX] 保持使用稳健的相对路径
+import { Asset, Transaction, AssetType, Currency } from '../../types'; 
+import EarningsCalendar from '../../components/EarningsCalendar';
 
 // --- 辅助函数 ---
 const RATES: Record<Currency, number> = { CNY: 1, USD: 7.2, HKD: 0.92 };
@@ -147,6 +146,9 @@ const AssetItem: React.FC<{
   );
 };
 
+/**
+ * --- 主页面组件: AssetsPage ---
+ */
 interface AssetsPageProps {
   assets: Asset[];
   dashboardCurrency: Currency;
@@ -238,6 +240,16 @@ const AssetsPage: React.FC<AssetsPageProps> = ({
                             <p className="text-[10px] text-gray-400 leading-none mb-0.5">推测年化</p>
                             <p className={`text-sm font-bold leading-none ${annualizedYield >= 0 ? 'text-red-400' : 'text-green-400'}`}>
                                 {daysInvested > 7 ? (annualizedYield >= 0 ? '+' : '') + annualizedYield.toFixed(2) + '%' : '--'}
+                            </p>
+                        </div>
+                    </div>
+                    {/* [FIX] 恢复“已投资天数”显示模块 */}
+                    <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
+                        <Clock size={14} className="text-blue-400" />
+                        <div>
+                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">已运行</p>
+                            <p className="text-sm font-bold leading-none text-blue-100">
+                                {daysInvested} 天
                             </p>
                         </div>
                     </div>
