@@ -247,7 +247,7 @@ const AssetsPage: React.FC<AssetsPageProps> = ({
                     <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
                         <Clock size={14} className="text-blue-400" />
                         <div>
-                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">已投资>tp>
+                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">已投资</p>
                             <p className="text-sm font-bold leading-none text-blue-100">
                                 {daysInvested} 天
                             </p>
