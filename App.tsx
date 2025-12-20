@@ -27,22 +27,21 @@ import {
   onSnapshot
 } from "firebase/firestore";
 
-// --- Local Imports (修复路径引用问题) ---
-// 使用 @/ 别名指向根目录，确保路径解析正确
-import { Asset, Transaction, AssetType, Currency } from '@/types';
-import { analyzeEarningsScreenshot, AIAssetRecord } from '@/services/gemini';
-import { getUniqueProductNames } from '@/services/storage';
+// --- Local Imports (Fix: Use relative paths ./) ---
+import { Asset, Transaction, AssetType, Currency } from './types';
+import { analyzeEarningsScreenshot, AIAssetRecord } from './services/gemini';
+import { getUniqueProductNames } from './services/storage';
 
 // 引入组件
-import TopNavBar from '@/components/Layout/TopNavBar';
-import BottomNav from '@/components/Layout/BottomNav';
-import SmartInput from '@/components/SmartInput';
+import TopNavBar from './components/Layout/TopNavBar';
+import BottomNav from './components/Layout/BottomNav';
+import SmartInput from './components/SmartInput';
 
 // 引入页面
-import AssetsPage from '@/src/pages/AssetsPage';
-import AnalysisPage from '@/src/pages/AnalysisPage';
-import AILabPage from '@/src/pages/AILabPage';
-import ProfilePage from '@/src/pages/ProfilePage';
+import AssetsPage from './src/pages/AssetsPage';
+import AnalysisPage from './src/pages/AnalysisPage';
+import AILabPage from './src/pages/AILabPage';
+import ProfilePage from './src/pages/ProfilePage';
 
 /**
  * --- UTILS ---
@@ -76,7 +75,6 @@ const findMatchingAsset = (assets: Asset[], targetName: string, targetInst: stri
   });
 };
 
-// [RESTORED] 还原 consolidateAssets 函数，因为它没有在 storage.ts 中导出
 const consolidateAssets = (rawAssets: Asset[]): Asset[] => {
   return rawAssets.map(asset => {
     let totalPrincipalBase = 0; 
