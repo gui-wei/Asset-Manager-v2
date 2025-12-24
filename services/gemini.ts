@@ -1,5 +1,11 @@
+{
+type: uploaded file
+fileName: gui-wei/asset-manager-v2/Asset-Manager-v2-main/services/gemini.ts
+fullContent:
 import { GoogleGenAI } from "@google/genai";
+import { SalaryRecord } from "../types";
 
+// 现有的资产识别接口
 export interface AIAssetRecord {
   date: string;
   amount: number;
@@ -8,6 +14,17 @@ export interface AIAssetRecord {
   institution?: string;
   currency?: 'CNY' | 'USD' | 'HKD';
   assetType?: 'Fund' | 'Stock' | 'Gold' | 'Other';
+}
+
+// [NEW] 工资识别接口 (部分字段可能为空)
+export interface AISalaryResult {
+  year?: number;
+  month?: number;
+  basicSalary?: number;
+  settlingInAllowance?: number;
+  extraIncome?: number;
+  subsidy?: number;
+  monthlyBonus?: number;
 }
 
 const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promise<string> => {
@@ -42,57 +59,79 @@ const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promi
   });
 };
 
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
+
+// 现有的资产截图分析函数 (保持不变)
 export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRecord[]> => {
+  // ... (保持原有代码逻辑)
   if (!base64Image) return [];
-
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  
-  if (!apiKey) {
-      console.error("Gemini API Key is missing. Please check your .env file.");
-      return [];
-  }
-
   try {
     const compressedDataUrl = await compressImage(base64Image);
     const parts = compressedDataUrl.split(',');
     const cleanBase64 = parts.length > 1 ? parts[1] : compressedDataUrl;
     
-    const todayStr = new Date().toISOString().split('T')[0];
-    const year = new Date().getFullYear();
-
-    // 🔥 核心优化：针对“收益日历”和“列表视图”的双重识别逻辑
     const prompt = `
-      You are an expert financial data assistant. Analyze this screenshot from a Chinese investment app (e.g., Tonghuashun, Alipay).
+      You are an expert personal finance assistant. Analyze this screenshot of an investment transaction.
+      **GOAL**: Extract data to "Group" assets logically.
+      1. **Date**: Prioritize "Confirmation Date". Format: YYYY-MM-DD.
+      2. **Product Name**: Extract Core Product Name.
+      3. **Institution**: Identify Asset Manager/Platform.
+      4. **Type**: "deposit" (Buy) or "earning" (Income).
+      OUTPUT JSON ONLY: { "records": [ { "productName": "...", "institution": "...", "amount": number, "date": "...", "type": "deposit"|"earning", "currency": "CNY"|"USD"|"HKD", "assetType": "Fund"|"Gold"|"Other" } ] }
+    `;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } }] }], generationConfig: { responseMimeType: "application/json" } }) }
+    );
+    if (!response.ok) throw new Error(`API Error: ${response.status}`);
+    const result = await response.json();
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) return [];
+    const parsed = JSON.parse(text);
+    return parsed.records || [];
+  } catch (error) {
+    console.error("Gemini Analysis Failed:", error);
+    throw error;
+  }
+};
+
+// [NEW] 新增：工资条截图分析函数
+export const analyzeSalaryScreenshot = async (base64Image: string): Promise<AISalaryResult> => {
+  if (!base64Image) return {};
+
+  try {
+    const compressedDataUrl = await compressImage(base64Image);
+    const parts = compressedDataUrl.split(',');
+    const cleanBase64 = parts.length > 1 ? parts[1] : compressedDataUrl;
+
+    const prompt = `
+      你是一个专业的财务助手。请分析这张中文工资条或银行入账截图。
       
-      **GOAL**: Extract transaction records accurately.
+      **目标**：提取以下特定的收入组成部分。如果某项没有明确列出，请返回 0。
+      
+      请提取：
+      1. **Year/Month**: 工资所属的年份和月份 (例如 2025, 12)。
+      2. **Basic Salary (基本工资)**: 包含岗位工资、基础工资等核心部分。
+      3. **Settling-in Allowance (安家费)**: 明确标记为“安家费”或类似的项目。
+      4. **Extra Income (额外收入)**: 兼职、理财收益、其他非常规收入。
+      5. **Subsidy (补贴)**: 餐补、交通补、通讯补、高温补等补贴的总和。
+      6. **Bonus (奖金)**: 绩效奖金、月度奖金等。
 
-      **SCENARIO A: EARNINGS CALENDAR (收益日历 Grid View)**
-      If the image looks like a monthly calendar grid with numbers in cells:
-      1. **Header Date**: Find the Year and Month at the top (e.g., "2024年11月" or "2023.06"). Use this to construct full dates.
-      2. **Grid Iteration**: Go through every day-cell in the grid.
-      3. **Value & Sign Logic (CRITICAL)**:
-         - **PROFIT (Positive)**: Cell has Red/Orange/Pink background OR text color OR a "+" sign. -> Extract as POSITIVE earning.
-         - **LOSS (Negative)**: Cell has Green/Blue background OR text color OR a "-" sign. -> Extract as NEGATIVE earning (e.g., -1250.00).
-         - **Ignore**: Cells marked "休" (Holiday), "0", or empty cells.
-      4. **Record Construction**:
-         - Date: YYYY-MM-DD (Combine header year/month + cell day).
-         - Amount: The number in the cell.
-         - Type: "earning".
-         - Institution: "Tonghuashun" (or infer from UI).
-         - Product Name: "股票账户" (Stock Account) or specific stock name if visible in header.
-         - Asset Type: "Stock".
+      **注意**：
+      - 请智能合并同类项（例如“交通补”+“餐补”都算进 Subsidy）。
+      - 只提取数字，不要单位。
 
-      **SCENARIO B: TRANSACTION LIST (List View)**
-      If the image is a standard list of rows:
-      1. **Product Name**: Extract full name, remove codes like (001234).
-      2. **Institution**: Standardize (Alipay, WeChat, etc.).
-      3. **Type**: 
-         - "deposit" for keywords: Buy, Purchase, 买入, 申购.
-         - "earning" for keywords: Income, Profit, 收益, +xx.xx.
-      4. **Asset Type**: Infer Fund/Stock/Gold based on name.
-
-      **OUTPUT JSON ONLY**: 
-      { "records": [ { "productName": "...", "institution": "...", "amount": number, "date": "YYYY-MM-DD", "type": "deposit"|"earning", "currency": "CNY"|"USD"|"HKD", "assetType": "Fund"|"Stock"|"Gold"|"Other" } ] }
+      **输出格式 (JSON)**:
+      {
+        "year": 2025,
+        "month": 12,
+        "basicSalary": 0.00,
+        "settlingInAllowance": 0.00,
+        "extraIncome": 0.00,
+        "subsidy": 0.00,
+        "monthlyBonus": 0.00
+      }
     `;
 
     const response = await fetch(
@@ -114,20 +153,16 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
       }
     );
 
-    if (!response.ok) {
-        throw new Error(`API Error: ${response.status}`);
-    }
-    
+    if (!response.ok) throw new Error(`API Error: ${response.status}`);
     const result = await response.json();
     const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
     
-    if (!text) return [];
-    
-    const parsed = JSON.parse(text);
-    return parsed.records || [];
+    if (!text) return {};
+    return JSON.parse(text);
 
   } catch (error) {
-    console.error("Gemini Analysis Failed:", error);
+    console.error("Gemini Salary Analysis Failed:", error);
     throw error;
   }
 };
+}
