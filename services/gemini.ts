@@ -1,7 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
-import { SalaryRecord } from "../types";
-
-// 现有的资产识别接口
 export interface AIAssetRecord {
   date: string;
   amount: number;
@@ -12,7 +8,6 @@ export interface AIAssetRecord {
   assetType?: 'Fund' | 'Stock' | 'Gold' | 'Other';
 }
 
-// [NEW] 工资识别接口 (部分字段可能为空)
 export interface AISalaryResult {
   year?: number;
   month?: number;
@@ -57,9 +52,14 @@ const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promi
 
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
 
-// 现有的资产截图分析函数 (保持不变)
+// --- 功能 1: 识别投资资产/收益截图 ---
 export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRecord[]> => {
   if (!base64Image) return [];
+  if (!apiKey) {
+    console.error("Gemini API Key is missing");
+    throw new Error("API Key Missing");
+  }
+
   try {
     const compressedDataUrl = await compressImage(base64Image);
     const parts = compressedDataUrl.split(',');
@@ -72,11 +72,11 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
       2. **Product Name**: Extract Core Product Name.
       3. **Institution**: Identify Asset Manager/Platform.
       4. **Type**: "deposit" (Buy) or "earning" (Income).
-      OUTPUT JSON ONLY: { "records": [ { "productName": "...", "institution": "...", "amount": number, "date": "...", "type": "deposit"|"earning", "currency": "CNY"|"USD"|"HKD", "assetType": "Fund"|"Gold"|"Other" } ] }
+      OUTPUT JSON ONLY: { "records": [ { "productName": "...", "institution": "...", "amount": number, "date": "...", "type": "deposit"|"earning", "currency": "CNY"|"USD"|"HKD", "assetType": "Fund"|"Stock"|"Gold"|"Other" } ] }
     `;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } }] }], generationConfig: { responseMimeType: "application/json" } }) }
     );
     if (!response.ok) throw new Error(`API Error: ${response.status}`);
@@ -91,9 +91,13 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
   }
 };
 
-// [NEW] 新增：工资条截图分析函数
+// --- 功能 2: 识别工资条截图 ---
 export const analyzeSalaryScreenshot = async (base64Image: string): Promise<AISalaryResult> => {
   if (!base64Image) return {};
+  if (!apiKey) {
+    console.error("Gemini API Key is missing");
+    throw new Error("API Key Missing");
+  }
 
   try {
     const compressedDataUrl = await compressImage(base64Image);
@@ -130,7 +134,7 @@ export const analyzeSalaryScreenshot = async (base64Image: string): Promise<AISa
     `;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
