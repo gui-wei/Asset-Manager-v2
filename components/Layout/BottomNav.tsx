@@ -1,7 +1,3 @@
-{
-type: uploaded file
-fileName: gui-wei/asset-manager-v2/Asset-Manager-v2-main/components/Layout/BottomNav.tsx
-fullContent:
 import React from 'react';
 import { Wallet, TrendingUp, User, Banknote } from 'lucide-react';
 
