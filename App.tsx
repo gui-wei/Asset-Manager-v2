@@ -28,12 +28,12 @@ import {
 } from "firebase/firestore";
 
 // Component Imports
-import BottomNav from './components/Layout/BottomNav.tsx';
-import AssetsPage from './src/pages/AssetsPage.tsx';
-import AnalysisPage from './src/pages/AnalysisPage.tsx';
-import ProfilePage from './src/pages/ProfilePage.tsx';
-import SalaryPage from './src/pages/SalaryPage.tsx';
-import SmartInput from './components/SmartInput.tsx';
+import BottomNav from './components/Layout/BottomNav';
+import AssetsPage from './src/pages/AssetsPage';
+import AnalysisPage from './src/pages/AnalysisPage';
+import ProfilePage from './src/pages/ProfilePage';
+import SalaryPage from './src/pages/SalaryPage';
+import SmartInput from './components/SmartInput';
 
 import { analyzeEarningsScreenshot, analyzeSalaryScreenshot, AIAssetRecord } from './services/gemini';
 import { Asset, Transaction, AssetType, Currency, SalaryRecord } from './types';
@@ -207,7 +207,7 @@ const AuthScreen: React.FC = () => {
   );
 };
 
-// [NEW] 工资录入 Modal (完全按照截图设计)
+// [NEW] 工资录入 Modal
 const AddSalaryModal: React.FC<{ 
   isOpen: boolean; 
   onClose: () => void; 
@@ -632,7 +632,7 @@ export default function App() {
     const asset = assets.find(a => a.id === assetId);
     if (!asset) return;
     const newHistory = asset.history.filter(tx => tx.id !== txId);
-    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', assetId), { history: newHistory });
+    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', asset.id), { history: newHistory });
     setEditingTransaction(null);
   };
 
