@@ -1,5 +1,5 @@
 import React from 'react';
-import { Wallet, TrendingUp, PieChart, User, NotebookPen } from 'lucide-react';
+import { Wallet, TrendingUp, User, NotebookPen } from 'lucide-react';
 
 interface BottomNavProps {
   activeTab: 'invest' | 'accounting' | 'analysis' | 'me';
