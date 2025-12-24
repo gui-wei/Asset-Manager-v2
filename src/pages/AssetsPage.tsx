@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
-// [FIX] 保持使用稳健的相对路径
 import { Asset, Transaction, AssetType, Currency } from '../../types'; 
 import EarningsCalendar from '../../components/EarningsCalendar';
 
@@ -243,7 +242,6 @@ const AssetsPage: React.FC<AssetsPageProps> = ({
                             </p>
                         </div>
                     </div>
-                    {/* [FIX] 恢复“已投资天数”显示模块 */}
                     <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
                         <Clock size={14} className="text-blue-400" />
                         <div>
