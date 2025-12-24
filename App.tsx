@@ -1,7 +1,3 @@
-{
-type: uploaded file
-fileName: gui-wei/asset-manager-v2/Asset-Manager-v2-main/App.tsx
-fullContent:
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, ChevronDown, HelpCircle, Wallet, 
