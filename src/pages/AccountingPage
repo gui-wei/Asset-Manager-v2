@@ -1,7 +1,3 @@
-{
-type: uploaded file
-fileName: gui-wei/asset-manager-v2/Asset-Manager-v2-main/src/pages/AccountingPage.tsx
-fullContent:
 import React, { useMemo } from 'react';
 import { Asset, Transaction } from '../../types';
 import { FileText, ArrowUpRight, ArrowDownLeft, Calendar } from 'lucide-react';
@@ -117,4 +113,3 @@ const AccountingPage: React.FC<AccountingPageProps> = ({ assets }) => {
 };
 
 export default AccountingPage;
-}
