@@ -1,7 +1,3 @@
-{
-type: uploaded file
-fileName: gui-wei/asset-manager-v2/Asset-Manager-v2-main/src/pages/SalaryPage.tsx
-fullContent:
 import React, { useState } from 'react';
 import { 
   Plus, Camera, ChevronDown, ChevronUp, Briefcase, 
@@ -148,4 +144,3 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
 };
 
 export default SalaryPage;
-}
