@@ -1,40 +1,57 @@
+{
+type: uploaded file
+fileName: gui-wei/asset-manager-v2/Asset-Manager-v2-main/types.ts
+fullContent:
 export enum AssetType {
   FUND = 'Fund',
-  STOCK = 'Stock', // 新增这一行
+  STOCK = 'Stock',
   GOLD = 'Gold',
   OTHER = 'Other'
 }
 
 export type Currency = 'CNY' | 'USD' | 'HKD';
 
+// 现有的资产相关接口
 export interface Transaction {
   id: string;
-  date: string; // ISO Date string YYYY-MM-DD
+  date: string;
   type: 'deposit' | 'earning';
   amount: number;
   description?: string;
-}
-
-export interface DailyEarning {
-  date: string;
-  amount: number;
+  currency?: Currency;
 }
 
 export interface Asset {
   id: string;
-  institution: string; // The "Channel" e.g., Alipay, Bank
-  productName: string; // The specific product
+  institution: string;
+  productName: string;
   type: AssetType;
-  currency: Currency; // CNY, USD, HKD
+  currency: Currency;
+  earningsCurrency?: Currency;
   remark?: string;
-  currentAmount: number; // Total value
-  totalEarnings: number; // Accumulated earnings
-  sevenDayYield?: number; // %
+  currentAmount: number;
+  totalEarnings: number;
+  sevenDayYield?: number;
   history: Transaction[];
-  dailyEarnings: Record<string, number>; // Map date to amount for fast lookup
+  dailyEarnings: Record<string, number>;
+}
+
+// [NEW] 新增工资记录接口
+export interface SalaryRecord {
+  id: string;
+  date: string; // YYYY-MM 格式，用于标记月份
+  basicSalary: number; // 基本工资
+  settlingInAllowance: number; // 安家费
+  extraIncome: number; // 额外收入
+  subsidy: number; // 每月补贴金额
+  subsidyType: 'card' | 'cash'; // 补贴类型：购物卡/现金
+  monthlyBonus: number; // 每月奖金
+  total: number; // 当月总计 (自动计算)
+  remark?: string; // 备注
 }
 
 export interface DashboardStats {
   totalAssets: number;
   totalEarnings: number;
+}
 }
