@@ -50,4 +50,3 @@ const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onChange }) => {
 };
 
 export default BottomNav;
-}
