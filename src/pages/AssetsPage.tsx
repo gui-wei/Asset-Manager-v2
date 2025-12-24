@@ -27,7 +27,7 @@ const AssetItem: React.FC<{
   onDeleteTransaction: (txId: string) => void; 
   onDelete: (id: string) => void; 
   onEditInfo: () => void; 
-  onDirectAIScan: (mode: 'earning' | 'withdrawal') => void; 
+  onDirectAIScan: () => void; 
 }> = ({ asset, onEditTransaction, onDeleteTransaction, onDelete, onEditInfo, onDirectAIScan }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -93,8 +93,7 @@ const AssetItem: React.FC<{
             <div className="flex justify-between items-center mb-3 px-1">
               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5"><History size={14} /> 资金明细</h4>
               <div className="flex items-center gap-2">
-                  <button onClick={(e) => { e.stopPropagation(); onDirectAIScan('earning'); }} className="text-xs bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-full text-indigo-600 flex items-center gap-1.5 hover:bg-indigo-100 font-bold shadow-sm transition-colors"><Sparkles size={12} /> 收益录入</button>
-                  <button onClick={(e) => { e.stopPropagation(); onDirectAIScan('withdrawal'); }} className="text-xs bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-full text-orange-600 flex items-center gap-1.5 hover:bg-orange-100 font-bold shadow-sm transition-colors"><ArrowUpRight size={12} /> 赎回</button>
+                  <button onClick={(e) => { e.stopPropagation(); onDirectAIScan(); }} className="text-xs bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-full text-indigo-600 flex items-center gap-1.5 hover:bg-indigo-100 font-bold shadow-sm transition-colors"><Sparkles size={12} /> AI 录入</button>
                   <button onClick={(e) => { e.stopPropagation(); setShowCalendar(true); }} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded-full text-gray-600 flex items-center gap-1.5 hover:bg-gray-100 font-medium shadow-sm transition-colors"><Calendar size={14} className="text-blue-500"/> 查看日历</button>
               </div>
             </div>
@@ -103,11 +102,12 @@ const AssetItem: React.FC<{
                   const txCurrency = record.currency || (record.type === 'deposit' ? asset.currency : earningsCurrency);
                   const txSymbol = getSymbol(txCurrency);
                   const isDeposit = record.type === 'deposit';
-                  const isWithdrawal = record.type === 'withdrawal';
+                  const isWithdrawal = record.type === 'withdrawal'; // Although type defines 'deposit'|'earning', safeguard for extensions
                   const isPositiveEarning = record.type === 'earning' && record.amount > 0;
                   
-                  let textColorClass = isDeposit ? 'text-blue-500' : (isWithdrawal ? 'text-orange-500' : (isPositiveEarning ? 'text-red-500' : 'text-green-600'));
-                  let dotColorClass = isDeposit ? 'bg-blue-500' : (isWithdrawal ? 'bg-orange-500' : (isPositiveEarning ? 'bg-red-500' : 'bg-green-600'));
+                  // Simple color logic
+                  let textColorClass = isDeposit ? 'text-blue-500' : (isPositiveEarning ? 'text-red-500' : 'text-green-600');
+                  let dotColorClass = isDeposit ? 'bg-blue-500' : (isPositiveEarning ? 'bg-red-500' : 'bg-green-600');
 
                   return (
                     <div key={record.id} className="flex justify-between items-center text-sm bg-white p-3 rounded-lg shadow-sm border border-gray-100 group">
@@ -115,13 +115,12 @@ const AssetItem: React.FC<{
                         <div className={`w-1.5 h-1.5 rounded-full ${dotColorClass}`}></div>
                         <span className="text-gray-400 text-xs">{record.date}</span>
                         <div className="flex items-center gap-1">
-                            {isWithdrawal && <LogOut size={12} className="text-orange-400" />}
                             <span className="text-gray-700 font-medium truncate max-w-[80px] sm:max-w-[120px]">{record.description}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
                         <span className={`font-mono font-bold ${textColorClass}`}>
-                            {isWithdrawal ? '-' : ''}{txSymbol}{Math.abs(record.amount).toLocaleString()}
+                            {record.type === 'earning' && record.amount > 0 ? '+' : ''}{txSymbol}{Math.abs(record.amount).toLocaleString()}
                         </span>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button onClick={(e) => { e.stopPropagation(); onEditTransaction(record); }} className="p-1.5 text-gray-300 hover:text-blue-500 hover:bg-blue-50 rounded transition"><Pencil size={14} /></button>
@@ -277,7 +276,7 @@ const AssetsPage: React.FC<AssetsPageProps> = ({
                       onDeleteTransaction={(txId) => onDeleteTransaction(asset.id, txId)} 
                       onDelete={onDeleteAsset} 
                       onEditInfo={() => onEditAsset(asset)} 
-                      onDirectAIScan={onOpenScan} 
+                      onDirectAIScan={() => onOpenScan('earning')} // Pass simple mode or default
                     />
                   ))}
                 </div>
