@@ -311,6 +311,136 @@ const AddSalaryModal: React.FC<{
   );
 };
 
+// [FIX] 补充缺失的 AIScanModal 组件定义
+const AIScanModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  onUpload: () => void;
+  isProcessing: boolean;
+  assets: Asset[];
+  targetAssetId: string;
+  setTargetAssetId: (id: string) => void;
+  manualCurrency: string;
+  setManualCurrency: (c: string) => void;
+  manualInstitution: string;
+  setManualInstitution: (i: string) => void;
+  lastProcessedCount: number;
+}> = ({
+  isOpen, onClose, onUpload, isProcessing, assets,
+  targetAssetId, setTargetAssetId,
+  manualCurrency, setManualCurrency,
+  manualInstitution, setManualInstitution,
+  lastProcessedCount
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn p-4">
+      <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-scaleIn">
+        {/* 标题栏 */}
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+            <Sparkles size={20} className="text-indigo-500" />
+            AI 智能识别
+          </h2>
+          <button onClick={onClose} disabled={isProcessing} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
+            <X size={20} className="text-gray-400" />
+          </button>
+        </div>
+
+        {/* 成功状态 */}
+        {lastProcessedCount > 0 ? (
+          <div className="text-center py-6 animate-slideUp">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 size={32} className="text-green-500" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">识别成功</h3>
+            <p className="text-gray-500 text-sm font-medium">已成功录入 <span className="text-indigo-600 font-bold text-base">{lastProcessedCount}</span> 条记录</p>
+            <button onClick={onClose} className="mt-8 w-full py-3.5 bg-gray-900 text-white font-bold rounded-xl shadow-lg hover:bg-black transition-all">
+              完成
+            </button>
+          </div>
+        ) : (
+          /* 输入配置状态 */
+          <div className="space-y-5">
+             {/* 目标选择 */}
+             <div>
+               <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">识别目标 (归档到)</label>
+               <div className="relative">
+                 <select
+                   value={targetAssetId}
+                   onChange={(e) => setTargetAssetId(e.target.value)}
+                   className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+                 >
+                   <option value="auto">🤖 自动匹配 / 创建新资产</option>
+                   {assets.map(a => (
+                     <option key={a.id} value={a.id}>{a.productName} ({a.institution})</option>
+                   ))}
+                 </select>
+                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16}/>
+               </div>
+             </div>
+
+             {/* 手动覆盖选项 */}
+             <div className="grid grid-cols-2 gap-3">
+               <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">指定货币 (可选)</label>
+                  <div className="relative">
+                    <select
+                      value={manualCurrency}
+                      onChange={(e) => setManualCurrency(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm font-bold text-gray-800 appearance-none outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">自动识别</option>
+                      <option value="CNY">CNY</option>
+                      <option value="USD">USD</option>
+                      <option value="HKD">HKD</option>
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14}/>
+                  </div>
+               </div>
+               <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">指定渠道 (可选)</label>
+                  <input
+                    type="text"
+                    placeholder="如: 支付宝"
+                    value={manualInstitution}
+                    onChange={(e) => setManualInstitution(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+               </div>
+             </div>
+
+             {/* 上传按钮 */}
+             <button
+               onClick={onUpload}
+               disabled={isProcessing}
+               className={`w-full py-4 rounded-xl shadow-lg transition flex justify-center items-center gap-2 font-bold text-white ${
+                 isProcessing ? 'bg-gray-700 cursor-not-allowed' : 'bg-indigo-600 active:scale-95 hover:bg-indigo-700 shadow-indigo-200'
+               }`}
+             >
+               {isProcessing ? (
+                 <>
+                   <Loader2 className="animate-spin" size={18} />
+                   <span>正在分析截图...</span>
+                 </>
+               ) : (
+                 <>
+                   <UploadCloud size={20} />
+                   <span>上传截图开始识别</span>
+                 </>
+               )}
+             </button>
+             <p className="text-[10px] text-center text-gray-400 leading-relaxed">
+               支持支付宝、微信、银行App的<br/>资产详情页或交易记录截图
+             </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // [NEW] 工资 AI 识别 Modal
 const AISalaryScanModal: React.FC<{
   isOpen: boolean; onClose: () => void; onUpload: () => void; isProcessing: boolean;
