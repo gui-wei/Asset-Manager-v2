@@ -1,7 +1,3 @@
-{
-type: uploaded file
-fileName: gui-wei/asset-manager-v2/Asset-Manager-v2-main/services/gemini.ts
-fullContent:
 import { GoogleGenAI } from "@google/genai";
 import { SalaryRecord } from "../types";
 
@@ -63,7 +59,6 @@ const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
 // 现有的资产截图分析函数 (保持不变)
 export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AIAssetRecord[]> => {
-  // ... (保持原有代码逻辑)
   if (!base64Image) return [];
   try {
     const compressedDataUrl = await compressImage(base64Image);
@@ -165,4 +160,3 @@ export const analyzeSalaryScreenshot = async (base64Image: string): Promise<AISa
     throw error;
   }
 };
-}
