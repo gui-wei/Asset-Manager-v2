@@ -1,7 +1,3 @@
-{
-type: uploaded file
-fileName: gui-wei/asset-manager-v2/Asset-Manager-v2-main/types.ts
-fullContent:
 export enum AssetType {
   FUND = 'Fund',
   STOCK = 'Stock',
@@ -53,5 +49,4 @@ export interface SalaryRecord {
 export interface DashboardStats {
   totalAssets: number;
   totalEarnings: number;
-}
 }
