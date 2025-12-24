@@ -26,13 +26,14 @@ import {
   onSnapshot
 } from "firebase/firestore";
 
-// Component Imports
-import BottomNav from './components/Layout/BottomNav';
-import AssetsPage from './src/pages/AssetsPage';
-import AnalysisPage from './src/pages/AnalysisPage';
-import ProfilePage from './src/pages/ProfilePage';
-import AccountingPage from './src/pages/AccountingPage';
-import SmartInput from './components/SmartInput';
+// Component Imports - [FIX] Explicitly adding .tsx extension to avoid resolution errors
+import BottomNav from './components/Layout/BottomNav.tsx';
+import AssetsPage from './src/pages/AssetsPage.tsx';
+import AnalysisPage from './src/pages/AnalysisPage.tsx';
+import ProfilePage from './src/pages/ProfilePage.tsx';
+import AccountingPage from './src/pages/AccountingPage.tsx';
+import SmartInput from './components/SmartInput.tsx';
+
 import { analyzeEarningsScreenshot, AIAssetRecord } from './services/gemini';
 import { Asset, Transaction, AssetType, Currency } from './types';
 
