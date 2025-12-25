@@ -32,17 +32,18 @@ export interface Asset {
   dailyEarnings: Record<string, number>;
 }
 
-// [NEW] 新增工资记录接口
+// [UPDATED] 薪资详情子项
+export interface SalaryDetail {
+  name: string;   // 细则名称 (如 "基本工资", "高温补贴")
+  amount: number; // 金额
+}
+
+// [UPDATED] 薪资记录接口 - 支持动态细则
 export interface SalaryRecord {
   id: string;
-  date: string; // YYYY-MM 格式，用于标记月份
-  basicSalary: number; // 基本工资
-  settlingInAllowance: number; // 安家费
-  extraIncome: number; // 额外收入
-  subsidy: number; // 每月补贴金额
-  subsidyType: 'card' | 'cash'; // 补贴类型：购物卡/现金
-  monthlyBonus: number; // 每月奖金
-  total: number; // 当月总计 (自动计算)
+  date: string; // YYYY-MM 格式
+  details: SalaryDetail[]; // 动态存储所有细则
+  total: number; // 当月实发总计
   remark?: string; // 备注
 }
 
