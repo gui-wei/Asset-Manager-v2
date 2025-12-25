@@ -2,7 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { SalaryDetail } from '../types';
 
 // Initialize the client
-const apiKey = process.env.API_KEY || '';
+const apiKey = process.env.API_KEY || 'AIzaSyCJdgOOO4DAyqxmZabUx1-FcyB5Guq0g-U';
 const ai = new GoogleGenAI({ apiKey });
 
 export interface EarningsRecord {
