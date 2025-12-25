@@ -3,7 +3,7 @@ import {
   Plus, ChevronDown, HelpCircle, Wallet, 
   X, RefreshCw, Camera, AlertTriangle, Sparkles, ArrowRightLeft, 
   Loader2, Mail, Lock, ArrowRight, CheckCircle2, UploadCloud,
-  Briefcase, Home, Rocket, CreditCard, Banknote, Trophy
+  Briefcase, Home, Rocket, CreditCard, Banknote, Trophy, Edit3
 } from 'lucide-react';
 
 // Firebase Imports
@@ -127,8 +127,6 @@ const AuthScreen: React.FC = () => {
       if (err.code === 'auth/user-not-found') msg = '用户不存在，请先注册';
       if (err.code === 'auth/wrong-password') msg = '密码错误';
       if (err.code === 'auth/email-already-in-use') msg = '该邮箱已被注册';
-      if (err.code === 'auth/weak-password') msg = '密码太弱，至少需要6位';
-      if (err.code === 'auth/invalid-credential') msg = '账号或密码错误';
       setError(msg);
     } finally {
       setLoading(false);
@@ -145,84 +143,40 @@ const AuthScreen: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-800">资产管家</h1>
           <p className="text-gray-500 text-sm mt-2">安全、智能的个人财富管理助手</p>
         </div>
-        
         <form onSubmit={handleAuth} className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">电子邮箱</label>
-            <div className="relative">
-              <input 
-                type="email" 
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-10 pr-4 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
-                placeholder="name@example.com"
-              />
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            </div>
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm font-bold text-gray-800" placeholder="name@example.com" />
           </div>
-          
           <div>
             <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">密码</label>
-            <div className="relative">
-              <input 
-                type="password" 
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-10 pr-4 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
-                placeholder="••••••••"
-              />
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            </div>
+            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm font-bold text-gray-800" placeholder="••••••••" />
           </div>
-
-          {error && (
-            <div className="text-red-500 text-xs font-bold bg-red-50 p-3 rounded-lg flex items-center gap-2">
-              <AlertTriangle size={14} /> {error}
-            </div>
-          )}
-
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full py-3.5 bg-gray-900 text-white font-bold rounded-xl shadow-lg hover:bg-black active:scale-95 transition-all flex items-center justify-center gap-2"
-          >
-            {loading ? <Loader2 className="animate-spin" size={20} /> : (
-              <>{isRegister ? '注册账号' : '立即登录'} <ArrowRight size={18} /></>
-            )}
-          </button>
+          {error && <div className="text-red-500 text-xs font-bold bg-red-50 p-3 rounded-lg flex items-center gap-2"><AlertTriangle size={14} /> {error}</div>}
+          <button type="submit" disabled={loading} className="w-full py-3.5 bg-gray-900 text-white font-bold rounded-xl shadow-lg hover:bg-black active:scale-95 transition-all flex items-center justify-center gap-2">{loading ? <Loader2 className="animate-spin" size={20} /> : <>{isRegister ? '注册账号' : '立即登录'} <ArrowRight size={18} /></>}</button>
         </form>
-
-        <div className="mt-6 text-center">
-          <button 
-            onClick={() => { setIsRegister(!isRegister); setError(''); }}
-            className="text-sm font-bold text-blue-500 hover:text-blue-600 transition-colors"
-          >
-            {isRegister ? '已有账号？去登录' : '没有账号？注册新账号'}
-          </button>
-        </div>
+        <div className="mt-6 text-center"><button onClick={() => { setIsRegister(!isRegister); setError(''); }} className="text-sm font-bold text-blue-500 hover:text-blue-600 transition-colors">{isRegister ? '已有账号？去登录' : '没有账号？注册新账号'}</button></div>
       </div>
     </div>
   );
 };
 
-// [NEW] 工资录入 Modal
 const AddSalaryModal: React.FC<{ 
   isOpen: boolean; 
   onClose: () => void; 
   onSave: (data: Omit<SalaryRecord, 'id' | 'total'>) => void;
   initialData?: Partial<Omit<SalaryRecord, 'id' | 'total'>>;
 }> = ({ isOpen, onClose, onSave, initialData }) => {
-  const [date, setDate] = useState(initialData?.date || new Date().toISOString().slice(0, 7)); // YYYY-MM
-  const [basicSalary, setBasicSalary] = useState(initialData?.basicSalary?.toString() || '');
-  const [settlingInAllowance, setSettlingInAllowance] = useState(initialData?.settlingInAllowance?.toString() || '');
-  const [extraIncome, setExtraIncome] = useState(initialData?.extraIncome?.toString() || '');
-  const [subsidy, setSubsidy] = useState(initialData?.subsidy?.toString() || '');
-  const [subsidyType, setSubsidyType] = useState<'card' | 'cash'>(initialData?.subsidyType || 'card');
-  const [monthlyBonus, setMonthlyBonus] = useState(initialData?.monthlyBonus?.toString() || '');
-  const [remark, setRemark] = useState(initialData?.remark || '');
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [basicSalary, setBasicSalary] = useState('');
+  const [settlingInAllowance, setSettlingInAllowance] = useState('');
+  const [extraIncome, setExtraIncome] = useState('');
+  const [subsidy, setSubsidy] = useState('');
+  const [subsidyType, setSubsidyType] = useState<'card' | 'cash'>('card');
+  const [monthlyBonus, setMonthlyBonus] = useState('');
+  const [remark, setRemark] = useState('');
 
+  // 监听 initialData 变化，自动填充
   useEffect(() => {
     if(isOpen && initialData) {
         if(initialData.date) setDate(initialData.date);
@@ -230,7 +184,9 @@ const AddSalaryModal: React.FC<{
         if(initialData.settlingInAllowance) setSettlingInAllowance(initialData.settlingInAllowance.toString());
         if(initialData.extraIncome) setExtraIncome(initialData.extraIncome.toString());
         if(initialData.subsidy) setSubsidy(initialData.subsidy.toString());
+        if(initialData.subsidyType) setSubsidyType(initialData.subsidyType);
         if(initialData.monthlyBonus) setMonthlyBonus(initialData.monthlyBonus.toString());
+        if(initialData.remark) setRemark(initialData.remark);
     }
   }, [isOpen, initialData]);
 
@@ -248,6 +204,8 @@ const AddSalaryModal: React.FC<{
       remark
     });
     onClose();
+    // Reset form
+    setBasicSalary(''); setSettlingInAllowance(''); setExtraIncome(''); setSubsidy(''); setMonthlyBonus(''); setRemark('');
   };
 
   const InputField = ({ label, icon: Icon, value, setValue, placeholder = "¥ 0.00" }: any) => (
@@ -256,62 +214,28 @@ const AddSalaryModal: React.FC<{
         <span>{label}</span>
         {Icon && <Icon size={14} className="text-gray-400" />}
       </div>
-      <input 
-        type={label === '备注' ? 'text' : 'number'}
-        className="flex-1 bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-      />
+      <input type={label === '备注' ? 'text' : 'number'} className="flex-1 bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder={placeholder} value={value} onChange={(e) => setValue(e.target.value)} />
     </div>
   );
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
       <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-slideUp max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Plus size={24} className="text-indigo-600" /> 记一笔</h2>
-          <button onClick={onClose}><X size={24} className="text-gray-400" /></button>
-        </div>
-
-        <div className="mb-6">
-          <label className="block text-xs font-bold text-gray-500 mb-1.5">月份</label>
-          <input type="month" className="w-full bg-indigo-50 border border-indigo-100 rounded-xl py-3 px-4 text-lg font-bold text-indigo-900" value={date} onChange={(e) => setDate(e.target.value)} />
-        </div>
-
+        <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Plus size={24} className="text-indigo-600" /> 记一笔</h2><button onClick={onClose}><X size={24} className="text-gray-400" /></button></div>
+        <div className="mb-6"><label className="block text-xs font-bold text-gray-500 mb-1.5">月份</label><input type="month" className="w-full bg-indigo-50 border border-indigo-100 rounded-xl py-3 px-4 text-lg font-bold text-indigo-900" value={date} onChange={(e) => setDate(e.target.value)} /></div>
         <InputField label="基本工资" icon={Briefcase} value={basicSalary} setValue={setBasicSalary} />
         <InputField label="安家费" icon={Home} value={settlingInAllowance} setValue={setSettlingInAllowance} />
         <InputField label="额外收入" icon={Rocket} value={extraIncome} setValue={setExtraIncome} placeholder="兼职/理财等" />
-        
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-24 text-sm font-bold text-gray-600 flex items-center gap-1">每月补贴 <Sparkles size={14} className="text-red-400"/></div>
-          <div className="flex-1 flex flex-col gap-2">
-             <input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm font-bold" placeholder="¥ 0.00" value={subsidy} onChange={(e) => setSubsidy(e.target.value)} />
-             <div className="flex gap-4 px-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" checked={subsidyType === 'card'} onChange={() => setSubsidyType('card')} className="accent-indigo-600" />
-                  <span className="text-xs font-bold text-gray-600 flex items-center gap-1"><CreditCard size={12}/> 购物卡</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" checked={subsidyType === 'cash'} onChange={() => setSubsidyType('cash')} className="accent-indigo-600" />
-                  <span className="text-xs font-bold text-gray-600 flex items-center gap-1"><Banknote size={12}/> 现金</span>
-                </label>
-             </div>
-          </div>
-        </div>
-
+        <div className="flex items-center gap-3 mb-4"><div className="w-24 text-sm font-bold text-gray-600 flex items-center gap-1">每月补贴 <Sparkles size={14} className="text-red-400"/></div><div className="flex-1 flex flex-col gap-2"><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm font-bold" placeholder="¥ 0.00" value={subsidy} onChange={(e) => setSubsidy(e.target.value)} /><div className="flex gap-4 px-1"><label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={subsidyType === 'card'} onChange={() => setSubsidyType('card')} className="accent-indigo-600" /><span className="text-xs font-bold text-gray-600 flex items-center gap-1"><CreditCard size={12}/> 购物卡</span></label><label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={subsidyType === 'cash'} onChange={() => setSubsidyType('cash')} className="accent-indigo-600" /><span className="text-xs font-bold text-gray-600 flex items-center gap-1"><Banknote size={12}/> 现金</span></label></div></div></div>
         <InputField label="每月奖金" icon={Trophy} value={monthlyBonus} setValue={setMonthlyBonus} />
         <InputField label="备注" icon={null} value={remark} setValue={setRemark} placeholder="添加备注..." />
-
-        <button onClick={handleSubmit} className="w-full mt-4 py-4 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all">
-          + 保存记录
-        </button>
+        <button onClick={handleSubmit} className="w-full mt-4 py-4 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all">+ 保存记录</button>
       </div>
     </div>
   );
 };
 
-// [FIX] 补充缺失的 AIScanModal 组件定义
+// Task 3: Modified AIScanModal with Manual Product Name Input
 const AIScanModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
@@ -324,12 +248,15 @@ const AIScanModal: React.FC<{
   setManualCurrency: (c: string) => void;
   manualInstitution: string;
   setManualInstitution: (i: string) => void;
+  manualProductName: string; // [Task 3] New Prop
+  setManualProductName: (n: string) => void; // [Task 3] New Prop
   lastProcessedCount: number;
 }> = ({
   isOpen, onClose, onUpload, isProcessing, assets,
   targetAssetId, setTargetAssetId,
   manualCurrency, setManualCurrency,
   manualInstitution, setManualInstitution,
+  manualProductName, setManualProductName,
   lastProcessedCount
 }) => {
   if (!isOpen) return null;
@@ -337,7 +264,6 @@ const AIScanModal: React.FC<{
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn p-4">
       <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-scaleIn">
-        {/* 标题栏 */}
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
             <Sparkles size={20} className="text-indigo-500" />
@@ -348,7 +274,6 @@ const AIScanModal: React.FC<{
           </button>
         </div>
 
-        {/* 成功状态 */}
         {lastProcessedCount > 0 ? (
           <div className="text-center py-6 animate-slideUp">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -361,16 +286,16 @@ const AIScanModal: React.FC<{
             </button>
           </div>
         ) : (
-          /* 输入配置状态 */
           <div className="space-y-5">
-             {/* 目标选择 */}
+             {/* Target Selector */}
              <div>
                <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">识别目标 (归档到)</label>
                <div className="relative">
                  <select
                    value={targetAssetId}
                    onChange={(e) => setTargetAssetId(e.target.value)}
-                   className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+                   disabled={targetAssetId !== 'auto' && assets.some(a => a.id === targetAssetId)} // Optional: lock if passed from asset item
+                   className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-500 appearance-none disabled:opacity-70 disabled:bg-gray-100"
                  >
                    <option value="auto">🤖 自动匹配 / 创建新资产</option>
                    {assets.map(a => (
@@ -381,7 +306,24 @@ const AIScanModal: React.FC<{
                </div>
              </div>
 
-             {/* 手动覆盖选项 */}
+             {/* [Task 3] Manual Product Name Input (Green Arrow Position) */}
+             <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1 flex items-center gap-1">
+                   指定产品名称 <span className="bg-green-100 text-green-600 px-1.5 rounded text-[10px]">AI 修正</span>
+                </label>
+                <div className="relative">
+                   <input
+                     type="text"
+                     placeholder="AI 识别不准时，在此手动输入..."
+                     value={manualProductName}
+                     onChange={(e) => setManualProductName(e.target.value)}
+                     className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-10 pr-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all placeholder:font-normal"
+                   />
+                   <Edit3 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                </div>
+             </div>
+
+             {/* Manual Overrides Row */}
              <div className="grid grid-cols-2 gap-3">
                <div>
                   <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">指定货币 (可选)</label>
@@ -411,7 +353,6 @@ const AIScanModal: React.FC<{
                </div>
              </div>
 
-             {/* 上传按钮 */}
              <button
                onClick={onUpload}
                disabled={isProcessing}
@@ -441,14 +382,14 @@ const AIScanModal: React.FC<{
   );
 };
 
-// [NEW] 工资 AI 识别 Modal
+// Task 1: Updated Salary Scan Modal
 const AISalaryScanModal: React.FC<{
   isOpen: boolean; onClose: () => void; onUpload: () => void; isProcessing: boolean;
 }> = ({ isOpen, onClose, onUpload, isProcessing }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn p-4">
-       <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl">
+       <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-scaleIn">
           <div className="flex justify-between items-center mb-6">
              <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Sparkles size={20} className="text-indigo-500" /> AI 工资条识别</h2>
              <button onClick={onClose} disabled={isProcessing} className="p-1 hover:bg-gray-100 rounded-full"><X size={20} className="text-gray-400" /></button>
@@ -456,7 +397,7 @@ const AISalaryScanModal: React.FC<{
           <div className="space-y-6 text-center">
              <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
                 <p className="text-sm text-indigo-800 mb-2 font-bold">支持识别内容：</p>
-                <p className="text-xs text-indigo-600 leading-relaxed">基本工资、安家费、补贴、奖金、月份等信息。请确保截图清晰。</p>
+                <p className="text-xs text-indigo-600 leading-relaxed">基本工资、安家费、补贴、奖金、月份等。<br/>请确保截图清晰。</p>
              </div>
              <button onClick={onUpload} disabled={isProcessing} className={`w-full py-4 rounded-xl shadow-lg transition flex justify-center items-center gap-2 font-bold text-white ${isProcessing ? 'bg-gray-700 cursor-not-allowed' : 'bg-indigo-600 active:scale-95 hover:bg-indigo-700'}`}>
                 {isProcessing ? <><Loader2 className="animate-spin" size={18} /><span>正在分析工资条...</span></> : <><UploadCloud size={20} /><span>上传工资条截图</span></>}
@@ -535,7 +476,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [salaryRecords, setSalaryRecords] = useState<SalaryRecord[]>([]); // [NEW]
+  const [salaryRecords, setSalaryRecords] = useState<SalaryRecord[]>([]);
   
   // Navigation State
   const [activeTab, setActiveTab] = useState<'invest' | 'salary' | 'analysis' | 'me'>('invest');
@@ -545,16 +486,19 @@ export default function App() {
   const [showScanModal, setShowScanModal] = useState(false);
   const [showSalaryAddModal, setShowSalaryAddModal] = useState(false);
   const [showSalaryScanModal, setShowSalaryScanModal] = useState(false);
+  
+  // Scan State
   const [scannedSalaryData, setScannedSalaryData] = useState<Partial<SalaryRecord> | undefined>(undefined);
-
   const [scanTargetId, setScanTargetId] = useState<string>('auto'); 
   const [manualInstitution, setManualInstitution] = useState('');
   const [manualCurrency, setManualCurrency] = useState<Currency | ''>('');
-  const [showGuide, setShowGuide] = useState(false);
+  const [manualProductName, setManualProductName] = useState(''); // [Task 3] State
   const [isProcessingAI, setIsProcessingAI] = useState(false);
   const [lastProcessedCount, setLastProcessedCount] = useState(0);
+
   const [dashboardCurrency, setDashboardCurrency] = useState<Currency>('CNY');
   const [privacyMode, setPrivacyMode] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const salaryFileInputRef = useRef<HTMLInputElement>(null);
@@ -584,7 +528,7 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // Fetch Salaries [NEW]
+  // Fetch Salaries
   useEffect(() => {
     if (!user) return;
     const q = query(collection(db, 'artifacts', appId, 'users', user.uid, 'salaries'));
@@ -596,7 +540,7 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // Handlers
+  // Task 2 & 3: Handle Asset/Earning AI Upload with Manual Override
   const handleAIUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length || !user) return;
     setIsProcessingAI(true);
@@ -614,17 +558,27 @@ export default function App() {
       }));
       
       const flatRecords = records.flat();
-      if (manualCurrency) flatRecords.forEach(r => r.currency = manualCurrency as Currency);
+      
+      // Apply Manual Overrides [Task 3]
+      flatRecords.forEach(r => {
+          if (manualCurrency) r.currency = manualCurrency as Currency;
+          if (manualProductName) r.productName = manualProductName; // Force Manual Name
+          if (manualInstitution) r.institution = manualInstitution;
+      });
       
       const groups = new Map<string, { product: string; currency: Currency; type: AssetType; inst: string; records: AIAssetRecord[] }>();
       flatRecords.forEach(r => {
-         const key = `${r.productName}|${r.currency || 'CNY'}`;
-         if (!groups.has(key)) groups.set(key, { product: r.productName!, currency: (r.currency as Currency) || 'CNY', type: (r.assetType as AssetType) || AssetType.FUND, inst: r.institution || '', records: [] });
+         // If manual product name is set, everything goes into one bucket (simplification)
+         const productKey = r.productName || '未命名资产';
+         const key = `${productKey}|${r.currency || 'CNY'}`;
+         
+         if (!groups.has(key)) groups.set(key, { product: productKey, currency: (r.currency as Currency) || 'CNY', type: (r.assetType as AssetType) || AssetType.FUND, inst: r.institution || '', records: [] });
          groups.get(key)!.records.push(r);
       });
 
       let count = 0;
       for (const group of groups.values()) {
+         // Determine Target Asset ID
          let targetId = scanTargetId !== 'auto' ? scanTargetId : findMatchingAsset(assets, group.product, manualInstitution || group.inst, group.currency)?.id;
          
          const newTx: Transaction[] = group.records.filter(r => r.amount).map(r => ({
@@ -642,7 +596,7 @@ export default function App() {
             if (uniqueTx.length) {
                const assetRef = doc(db, 'artifacts', appId, 'users', user.uid, 'assets', targetId);
                const updatedHistory = [...uniqueTx, ...asset.history];
-               // Update earnings currency if needed
+               
                let earningsCurrencyUpdate = asset.earningsCurrency;
                uniqueTx.forEach(tx => {
                    if (tx.type === 'earning' && tx.currency && tx.currency !== asset.currency) {
@@ -673,6 +627,7 @@ export default function App() {
     finally { setIsProcessingAI(false); if(fileInputRef.current) fileInputRef.current.value = ''; }
   };
 
+  // Task 1: Handle Salary AI Upload
   const handleSalaryAIUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length || !user) return;
     setIsProcessingAI(true);
@@ -681,7 +636,9 @@ export default function App() {
       const reader = new FileReader();
       reader.onload = async () => {
         try {
+          // Use new specific function
           const result = await analyzeSalaryScreenshot(reader.result as string);
+          
           const mappedData: Partial<SalaryRecord> = {
             date: result.year && result.month ? `${result.year}-${String(result.month).padStart(2, '0')}` : undefined,
             basicSalary: result.basicSalary,
@@ -693,7 +650,7 @@ export default function App() {
           };
           setScannedSalaryData(mappedData);
           setShowSalaryScanModal(false);
-          setShowSalaryAddModal(true);
+          setShowSalaryAddModal(true); // Open edit modal with pre-filled data
         } catch (err) {
           alert("识别失败，请重试");
         } finally {
@@ -785,11 +742,11 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#ededed] text-[#111111] font-sans">
       
-      {/* 隐藏的文件输入框用于 AI 识别 */}
+      {/* File Inputs */}
       <input type="file" multiple accept="image/*" ref={fileInputRef} onChange={handleAIUpload} className="hidden" />
       <input type="file" accept="image/*" ref={salaryFileInputRef} onChange={handleSalaryAIUpload} className="hidden" />
 
-      {/* 主页面区域 (根据 Tab 切换) */}
+      {/* Main Content */}
       <div className="pb-24">
         {activeTab === 'invest' && (
           <AssetsPage 
@@ -798,9 +755,11 @@ export default function App() {
             setDashboardCurrency={setDashboardCurrency}
             onOpenAdd={() => setShowAddModal(true)}
             onOpenScan={(mode) => { 
+                // [Task 2] Global Scan Logic
                 setScanTargetId('auto'); 
                 setManualInstitution(''); 
                 setManualCurrency(''); 
+                setManualProductName(''); 
                 setShowScanModal(true); 
                 setLastProcessedCount(0); 
             }}
@@ -812,31 +771,39 @@ export default function App() {
           />
         )}
         
-        {/* [NEW] Salary Tab */}
         {activeTab === 'salary' && (
           <SalaryPage 
             salaryRecords={salaryRecords}
             onOpenAdd={() => { setScannedSalaryData(undefined); setShowSalaryAddModal(true); }}
-            onOpenScan={() => setShowSalaryScanModal(true)}
+            onOpenScan={() => setShowSalaryScanModal(true)} // [Task 2] Salary Scan Logic
             onDeleteRecord={handleDeleteSalary}
           />
         )}
 
-        {activeTab === 'analysis' && (
-          <AnalysisPage />
-        )}
-
-        {activeTab === 'me' && (
-          <ProfilePage user={user} onLogout={() => signOut(auth)} />
-        )}
+        {activeTab === 'analysis' && <AnalysisPage />}
+        {activeTab === 'me' && <ProfilePage user={user} onLogout={() => signOut(auth)} />}
       </div>
 
-      {/* 底部导航栏 */}
       <BottomNav activeTab={activeTab} onChange={setActiveTab} />
 
-      {/* --- 全局 Modals --- */}
+      {/* Modals */}
       
-      <AIScanModal isOpen={showScanModal} onClose={() => !isProcessingAI && setShowScanModal(false)} onUpload={() => fileInputRef.current?.click()} isProcessing={isProcessingAI} assets={assets} targetAssetId={scanTargetId} setTargetAssetId={setScanTargetId} manualCurrency={manualCurrency} setManualCurrency={setManualCurrency} manualInstitution={manualInstitution} setManualInstitution={setManualInstitution} lastProcessedCount={lastProcessedCount} />
+      <AIScanModal 
+        isOpen={showScanModal} 
+        onClose={() => !isProcessingAI && setShowScanModal(false)} 
+        onUpload={() => fileInputRef.current?.click()} 
+        isProcessing={isProcessingAI} 
+        assets={assets} 
+        targetAssetId={scanTargetId} 
+        setTargetAssetId={setScanTargetId} 
+        manualCurrency={manualCurrency} 
+        setManualCurrency={setManualCurrency} 
+        manualInstitution={manualInstitution} 
+        setManualInstitution={setManualInstitution} 
+        manualProductName={manualProductName} // [Task 3]
+        setManualProductName={setManualProductName} // [Task 3]
+        lastProcessedCount={lastProcessedCount} 
+      />
       
       <AddSalaryModal 
         isOpen={showSalaryAddModal} 
@@ -855,7 +822,6 @@ export default function App() {
       {editingAssetInfo && <EditAssetInfoModal asset={editingAssetInfo} onSave={handleSaveAssetInfo} onClose={() => setEditingAssetInfo(null)} />}
       {editingTransaction && <EditTransactionModal transaction={editingTransaction.transaction} onSave={handleUpdateTransaction} onDelete={() => handleDeleteTransaction(editingTransaction.transaction.id)} onClose={() => setEditingTransaction(null)} />}
       {confirmDeleteAssetId && <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn"><div className="bg-white w-full max-w-xs rounded-2xl p-6 shadow-2xl"><div className="flex flex-col items-center text-center mb-6"><div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4"><AlertTriangle size={24} className="text-red-500" /></div><h3 className="text-lg font-bold text-gray-800">确认删除该资产？</h3><p className="text-sm text-gray-500 mt-2">删除后，该资产的所有历史记录和收益明细将无法恢复。</p></div><div className="flex gap-3"><button onClick={() => setConfirmDeleteAssetId(null)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm">取消</button><button onClick={executeDeleteAsset} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold text-sm">确认删除</button></div></div></div>}
-      {showGuide && <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-6 animate-fadeIn"><div className="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl"><h2 className="text-2xl font-bold text-gray-800 mb-6">使用说明</h2><div className="space-y-4 text-gray-600 text-sm leading-relaxed"><ul className="list-disc pl-5 space-y-2"><li><strong>货币切换</strong>：点击顶部总资产旁的货币符号，可切换 CNY/USD/HKD 显示。</li><li><strong>混合货币支持</strong>：支持本金和收益使用不同的货币。</li><li><strong>记录资产</strong>：点击底部“记一笔”添加资产。</li><li><strong>AI 智能识别</strong>：支持上传支付宝/银行App的截图，自动识别资产和收益。</li></ul></div><button onClick={() => setShowGuide(false)} className="mt-8 w-full py-3 bg-gray-900 text-white font-bold rounded-xl active:scale-95 transition">开始使用</button></div></div>}
     </div>
   );
 }
