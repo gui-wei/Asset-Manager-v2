@@ -35,6 +35,7 @@ import ProfilePage from './src/pages/ProfilePage';
 import SalaryPage from './src/pages/SalaryPage';
 import SmartInput from './components/SmartInput';
 
+// [FIX] Updated import to use analyzeSalaryScreenshots instead of analyzeSalaryScreenshot
 import { analyzeEarningsScreenshot, analyzeSalaryScreenshots, AIAssetRecord } from './services/gemini';
 import { Asset, Transaction, AssetType, Currency, SalaryRecord, SalaryDetail } from './types';
 
@@ -238,27 +239,6 @@ const AddSalaryModal: React.FC<{
   // Calculated sum for display
   const calculatedSum = details.reduce((sum, d) => sum + (d.amount || 0), 0);
   const displayTotal = manualTotal !== null ? manualTotal : calculatedSum;
-
-  const handleSubmit = () => {
-    onSave({
-      date,
-      details: details.filter(d => d.name && d.amount !== 0), // Filter empty
-      remark,
-      // We pass the displayTotal implicitly via the total logic in handleSaveSalary, 
-      // but here we might need to store "realWage" explicitly if we want to persist the override.
-      // For simplicity, let's assume the onSave handler calculates total, 
-      // OR we add a hidden detail "调整差额" if needed, OR we trust the sum.
-      // Actually, to fulfill Task 1 ("real wage as total"), we should likely use the manualTotal 
-      // as the 'total' field in Firestore, even if details don't sum up perfectly.
-      // However, Firestore logic recalculates total. Let's adjust App's handleSaveSalary to accept a specific total.
-    });
-    // Hack: pass manualTotal via a temporary property or handle it in parent.
-    // Let's modify onSave signature in parent temporarily or just override there.
-    onClose();
-    setDetails([{ name: '基本工资', amount: 0 }, { name: '绩效奖金', amount: 0 }]);
-    setRemark('');
-    setManualTotal(null);
-  };
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
