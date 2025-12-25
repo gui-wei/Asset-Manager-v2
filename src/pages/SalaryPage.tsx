@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { 
-  Plus, Camera, ChevronDown, ChevronUp, Briefcase, 
-  Home, Rocket, CreditCard, Banknote, Trophy, FileText, Calendar, Trash2 
+  Plus, Camera, ChevronDown, 
+  Briefcase, Home, Rocket, CreditCard, Banknote, Trophy, Calendar, Trash2, 
+  Coins, PiggyBank, Receipt, Sparkles
 } from 'lucide-react';
-import { SalaryRecord } from '../../types';
+import { SalaryRecord, SalaryDetail } from '../../types';
 
 interface SalaryPageProps {
   salaryRecords: SalaryRecord[];
@@ -12,48 +13,67 @@ interface SalaryPageProps {
   onDeleteRecord: (id: string) => void;
 }
 
-// 辅助组件：详情行 (用于显示基本工资、安家费等细则)
+// 智能匹配图标助手
+const getIconForName = (name: string) => {
+  const n = name.toLowerCase();
+  if (n.includes('基本') || n.includes('岗位') || n.includes('工资')) return Briefcase;
+  if (n.includes('奖') || n.includes('绩效')) return Trophy;
+  if (n.includes('补') || n.includes('贴') || n.includes('房') || n.includes('餐')) return Sparkles;
+  if (n.includes('安家')) return Home;
+  if (n.includes('兼职') || n.includes('稿费')) return Rocket;
+  if (n.includes('公积金') || n.includes('社保')) return PiggyBank;
+  if (n.includes('税') || n.includes('扣')) return Receipt;
+  return Coins; // 默认图标
+};
+
+// 智能匹配颜色
+const getColorForName = (name: string) => {
+  const n = name.toLowerCase();
+  if (n.includes('扣') || n.includes('税')) return 'text-orange-500 bg-orange-50'; // 支出类/扣除类
+  if (n.includes('奖') || n.includes('绩效')) return 'text-yellow-600 bg-yellow-50';
+  if (n.includes('补')) return 'text-purple-500 bg-purple-50';
+  if (n.includes('基本')) return 'text-blue-500 bg-blue-50';
+  return 'text-indigo-500 bg-indigo-50';
+};
+
 const DetailRow: React.FC<{ 
-  icon: React.ElementType; 
-  label: string; 
-  amount: number; 
-  colorClass: string; 
-  suffix?: React.ReactNode 
-}> = ({ icon: Icon, label, amount, colorClass, suffix }) => (
-  <div className="flex justify-between items-center py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors px-2 rounded-lg">
-    <div className="flex items-center gap-3">
-      <div className={`p-2 rounded-lg ${colorClass} bg-opacity-10`}>
-        <Icon size={16} className={colorClass.replace('bg-', 'text-')} />
+  detail: SalaryDetail
+}> = ({ detail }) => {
+  const Icon = getIconForName(detail.name);
+  const colorClass = getColorForName(detail.name);
+  
+  return (
+    <div className="flex justify-between items-center py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors px-2 rounded-lg">
+      <div className="flex items-center gap-3">
+        <div className={`p-2 rounded-lg ${colorClass}`}>
+          <Icon size={16} />
+        </div>
+        <span className="text-sm text-gray-600 font-bold">{detail.name}</span>
       </div>
-      <span className="text-sm text-gray-600 font-bold">{label}</span>
+      <div className="flex items-center gap-2">
+        <span className="font-mono font-bold text-gray-800 text-sm">
+          {detail.amount > 0 ? '+' : ''}¥{detail.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+        </span>
+      </div>
     </div>
-    <div className="flex items-center gap-2">
-      <span className="font-mono font-bold text-gray-800 text-sm">
-        {amount > 0 ? '+' : ''}¥{amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-      </span>
-      {suffix}
-    </div>
-  </div>
-);
+  );
+};
 
 const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpenScan, onDeleteRecord }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // 计算年度总收入
   const currentYear = new Date().getFullYear();
   const yearlyTotal = salaryRecords
     .filter(r => r.date.startsWith(currentYear.toString()))
     .reduce((sum, r) => sum + r.total, 0);
 
-  // 按日期降序排列 (最新的月份在最上面)
   const sortedRecords = [...salaryRecords].sort((a, b) => b.date.localeCompare(a.date));
 
   return (
-    <div className="pb-32"> {/* 底部留白，防止被悬浮按钮遮挡 */}
+    <div className="pb-32">
       
-      {/* 顶部总览卡片 */}
+      {/* 顶部总览 */}
       <div className="bg-gradient-to-br from-indigo-900 to-indigo-700 pt-12 pb-20 px-6 rounded-b-[2.5rem] shadow-xl text-white relative overflow-hidden">
-        {/* 背景装饰 */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-400 opacity-10 rounded-full translate-y-1/2 -translate-x-1/4 blur-3xl pointer-events-none"></div>
         
@@ -75,7 +95,7 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
         </div>
       </div>
 
-      {/* 记录列表区域 */}
+      {/* 记录列表 */}
       <div className="px-4 -mt-10 relative z-20 space-y-4">
         {sortedRecords.length === 0 ? (
           <div className="bg-white rounded-3xl p-10 text-center shadow-lg border border-gray-100 animate-slideUp">
@@ -90,21 +110,22 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
             const isExpanded = expandedId === record.id;
             const [year, month] = record.date.split('-');
             
+            // 提取前两个主要项目作为摘要显示
+            const summaryItems = record.details.slice(0, 2);
+            const remainingCount = record.details.length - 2;
+            
             return (
               <div 
                 key={record.id} 
                 className={`bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden transition-all duration-300 animate-slideUp ${isExpanded ? 'shadow-xl ring-1 ring-indigo-50 scale-[1.02]' : 'hover:shadow-md'}`}
               >
-                {/* 卡片头部 (点击展开/收起) */}
                 <div 
                   onClick={() => setExpandedId(isExpanded ? null : record.id)}
                   className="p-5 flex justify-between items-center cursor-pointer bg-white relative overflow-hidden group"
                 >
-                  {/* 点击波纹效果容器 */}
                   <div className={`absolute inset-0 bg-indigo-50 transition-opacity duration-300 ${isExpanded ? 'opacity-100' : 'opacity-0 group-hover:opacity-30'}`}></div>
 
                   <div className="flex items-center gap-4 relative z-10">
-                    {/* 日期方块 */}
                     <div className={`flex flex-col items-center justify-center w-14 h-14 rounded-2xl font-bold transition-all duration-300 border ${
                       isExpanded 
                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-200' 
@@ -114,89 +135,39 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
                       <span className="text-xl leading-none">{parseInt(month)}<span className="text-[10px] ml-0.5">月</span></span>
                     </div>
                     
-                    {/* 标题与总额 */}
                     <div>
                       <h3 className={`font-bold text-lg font-mono transition-colors ${isExpanded ? 'text-indigo-900' : 'text-gray-800'}`}>
                         ¥ {record.total.toLocaleString()}
                       </h3>
                       <p className="text-xs text-gray-400 mt-1 flex items-center gap-1.5 font-medium">
-                        {record.remark ? (
-                          <span className="truncate max-w-[150px]">{record.remark}</span>
-                        ) : (
-                          <span className="opacity-50">无备注</span>
-                        )}
-                        {/* 简略标签 */}
-                        {record.monthlyBonus > 0 && <span className="bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded text-[9px]">奖金</span>}
-                        {record.extraIncome > 0 && <span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-[9px]">额外</span>}
+                        {record.remark ? <span className="truncate max-w-[100px]">{record.remark}</span> : <span className="opacity-50">无备注</span>}
+                        
+                        {/* 摘要标签 */}
+                        {summaryItems.map((item, idx) => (
+                          <span key={idx} className="bg-gray-100 px-1.5 py-0.5 rounded text-[9px] truncate max-w-[60px]">{item.name}</span>
+                        ))}
+                        {remainingCount > 0 && <span className="bg-gray-100 px-1.5 py-0.5 rounded text-[9px]">+{remainingCount}</span>}
                       </p>
                     </div>
                   </div>
 
-                  {/* 展开箭头 */}
                   <div className={`relative z-10 p-2 rounded-full transition-all duration-300 ${isExpanded ? 'bg-white text-indigo-600 rotate-180 shadow-sm' : 'text-gray-400 bg-transparent'}`}>
                     <ChevronDown size={20} />
                   </div>
                 </div>
 
-                {/* 抽屉详情 (展开显示) */}
+                {/* 动态详情列表 */}
                 <div 
                   className={`transition-all duration-300 ease-in-out bg-white border-t border-gray-50 px-5 overflow-hidden ${
-                    isExpanded ? 'max-h-[600px] opacity-100 py-4' : 'max-h-0 opacity-0 py-0'
+                    isExpanded ? 'max-h-[1000px] opacity-100 py-4' : 'max-h-0 opacity-0 py-0'
                   }`}
                 >
                   <div className="space-y-1">
-                    <DetailRow 
-                      icon={Briefcase} 
-                      label="基本工资" 
-                      amount={record.basicSalary} 
-                      colorClass="bg-blue-500" 
-                    />
-                    
-                    {(record.settlingInAllowance > 0) && (
-                      <DetailRow 
-                        icon={Home} 
-                        label="安家费" 
-                        amount={record.settlingInAllowance} 
-                        colorClass="bg-green-500" 
-                      />
-                    )}
-                    
-                    {(record.extraIncome > 0) && (
-                      <DetailRow 
-                        icon={Rocket} 
-                        label="额外收入" 
-                        amount={record.extraIncome} 
-                        colorClass="bg-purple-500" 
-                      />
-                    )}
-                    
-                    <DetailRow 
-                      icon={record.subsidyType === 'card' ? CreditCard : Banknote} 
-                      label="每月补贴" 
-                      amount={record.subsidy} 
-                      colorClass="bg-orange-500" 
-                      suffix={
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold border ${
-                          record.subsidyType === 'card' 
-                            ? 'bg-blue-50 text-blue-600 border-blue-100' 
-                            : 'bg-green-50 text-green-600 border-green-100'
-                        }`}>
-                          {record.subsidyType === 'card' ? '购物卡' : '现金'}
-                        </span>
-                      }
-                    />
-                    
-                    {(record.monthlyBonus > 0) && (
-                      <DetailRow 
-                        icon={Trophy} 
-                        label="每月奖金" 
-                        amount={record.monthlyBonus} 
-                        colorClass="bg-yellow-500" 
-                      />
-                    )}
+                    {record.details.map((detail, idx) => (
+                      <DetailRow key={idx} detail={detail} />
+                    ))}
                   </div>
                   
-                  {/* 底部操作栏 */}
                   <div className="mt-5 pt-4 border-t border-gray-100 flex justify-end">
                     <button 
                       onClick={(e) => { e.stopPropagation(); onDeleteRecord(record.id); }}
@@ -213,7 +184,7 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
         )}
       </div>
 
-      {/* 悬浮操作按钮 (Floating Action Bar) */}
+      {/* 悬浮操作按钮 */}
       <div className="fixed bottom-24 left-0 right-0 flex justify-center z-40 pointer-events-none">
         <div className="pointer-events-auto bg-gray-900 text-white rounded-full shadow-2xl shadow-indigo-200/50 flex items-center p-1.5 px-6 gap-0 backdrop-blur-xl hover:scale-105 transition duration-300 border border-white/10">
           <button 
