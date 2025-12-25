@@ -21,15 +21,23 @@ const getIconForName = (name: string) => {
   if (n.includes('补') || n.includes('贴') || n.includes('房') || n.includes('餐')) return Sparkles;
   if (n.includes('安家')) return Home;
   if (n.includes('兼职') || n.includes('稿费')) return Rocket;
-  if (n.includes('公积金') || n.includes('社保')) return PiggyBank;
+  if (n.includes('公积金') || n.includes('社保') || n.includes('险') || n.includes('年金')) return PiggyBank;
   if (n.includes('税') || n.includes('扣')) return Receipt;
   return Coins; // 默认图标
 };
 
-// 智能匹配颜色
-const getColorForName = (name: string) => {
+// 智能匹配颜色 (Task 2 & 3: Red for deductions, Green/Blue for income)
+const getColorForName = (name: string, amount: number) => {
+  // Priority: Check amount first. Negative = Red.
+  if (amount < 0) return 'text-red-500 bg-red-50';
+  
+  // Fallback to name-based logic if amount is positive but name suggests deduction (should happen less now with AI fix)
   const n = name.toLowerCase();
-  if (n.includes('扣') || n.includes('税')) return 'text-orange-500 bg-orange-50'; // 支出类/扣除类
+  if (n.includes('扣') || n.includes('税') || n.includes('险') || n.includes('金')) {
+      // It might be a deduction shown as positive in some contexts, but let's stick to standard colors
+      return 'text-orange-500 bg-orange-50'; 
+  }
+  
   if (n.includes('奖') || n.includes('绩效')) return 'text-yellow-600 bg-yellow-50';
   if (n.includes('补')) return 'text-purple-500 bg-purple-50';
   if (n.includes('基本')) return 'text-blue-500 bg-blue-50';
@@ -40,8 +48,41 @@ const DetailRow: React.FC<{
   detail: SalaryDetail
 }> = ({ detail }) => {
   const Icon = getIconForName(detail.name);
-  const colorClass = getColorForName(detail.name);
+  const colorClass = getColorForName(detail.name, detail.amount);
   
+  // Task 3: Only show "+" for positive, "-" is handled by the number itself (but we can format explicitly)
+  // Logic: 
+  // - If amount < 0, it already has "-".
+  // - If amount > 0, we add "+" only if it's strictly an "Income" type (standard salary view). 
+  //   However, user requested: "only add '-' if it's 'deduction' text, only add '+' if it's 'payable/net' text".
+  //   Actually, standard accounting usually just shows negative numbers with -. 
+  //   Let's follow the simpler visual cue: 
+  //   If amount is negative -> Show as is (e.g. -500)
+  //   If amount is positive -> Show with + (e.g. +5000) for better contrast, OR follow specific user request.
+  
+  // User Request Refinement: 
+  // "Cancel '+' or '-' in front of amount unless..."
+  // 1. If text contains "扣除" (deduction) -> Add "-" (Ensure amount is negative visually)
+  // 2. If text contains "应发" (payable), "实发" (real) -> Add "+"
+  
+  const n = detail.name.toLowerCase();
+  const isDeductionLike = n.includes('扣') || n.includes('税') || n.includes('险') || n.includes('金');
+  const isIncomeLike = n.includes('应发') || n.includes('实发') || n.includes('收入');
+
+  // We rely on the amount's sign from data primarily, but for *display prefix*:
+  let prefix = '';
+  if (isIncomeLike) prefix = '+';
+  else if (isDeductionLike && detail.amount > 0) prefix = '-'; // Visually force minus if positive amount but deduction name
+  
+  // Formatting value:
+  // If we force prefix '-', we should show abs value to avoid double negative '--500'
+  const displayValue = (isDeductionLike && detail.amount > 0) 
+      ? detail.amount.toLocaleString(undefined, { minimumFractionDigits: 2 }) 
+      : Math.abs(detail.amount).toLocaleString(undefined, { minimumFractionDigits: 2 });
+  
+  // Final sign logic for rendering
+  const finalSign = (detail.amount < 0) ? '-' : prefix;
+
   return (
     <div className="flex justify-between items-center py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors px-2 rounded-lg">
       <div className="flex items-center gap-3">
@@ -51,8 +92,8 @@ const DetailRow: React.FC<{
         <span className="text-sm text-gray-600 font-bold">{detail.name}</span>
       </div>
       <div className="flex items-center gap-2">
-        <span className="font-mono font-bold text-gray-800 text-sm">
-          {detail.amount > 0 ? '+' : ''}¥{detail.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+        <span className={`font-mono font-bold text-sm ${detail.amount < 0 || isDeductionLike ? 'text-red-500' : 'text-gray-800'}`}>
+          {finalSign}{displayValue}
         </span>
       </div>
     </div>
@@ -82,7 +123,7 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
             <div className="bg-white/20 p-1.5 rounded-lg backdrop-blur-sm">
               <Calendar size={14} className="text-white" />
             </div>
-            <span className="text-xs font-bold tracking-widest uppercase text-indigo-100">{currentYear} 年度总薪资</span>
+            <span className="text-xs font-bold tracking-widest uppercase text-indigo-100">{currentYear} 年度总薪资 (实发)</span>
           </div>
           <h1 className="text-5xl font-mono font-bold tracking-tight text-white drop-shadow-sm">
             <span className="text-2xl mr-2 opacity-80 font-sans">¥</span>
@@ -90,7 +131,7 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
           </h1>
           <p className="text-indigo-200 text-xs mt-3 font-medium flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
-            包含所有工资、奖金及额外补贴
+            已统计 {salaryRecords.length} 笔入账记录
           </p>
         </div>
       </div>
