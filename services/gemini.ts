@@ -8,7 +8,7 @@ import { SalaryDetail } from '../types';
 // 方式 2 (简单 - 仅本地测试): 直接将下面的 '' 替换为你的 Key 字符串
 // 例如: const apiKey = process.env.API_KEY || 'AIzaSyCcWjG9ef...'; 
 // ---------------------------------------------------------------------------
-const apiKey = process.env.API_KEY || 'AIzaSyCJdgOOO4DAyqxmZabUx1-FcyB5Guq0g-U'; 
+const apiKey = process.env.API_KEY || ''; 
 const ai = new GoogleGenAI({ apiKey });
 
 export interface EarningsRecord {
@@ -124,7 +124,6 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
         }
     });
 
-    // [FIX] Robust way to get text, avoiding .text() function call error
     const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
     
     if (!text) {
@@ -143,39 +142,45 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
 
 /**
  * Task 1 [OPTIMIZED]: 薪资条识别 AI (自主判断字段)
- * 能够识别任意名称的工资细则
+ * Task 2: 多图去重
+ * Task 3 [NEW]: 智能正负号与实发工资识别
  */
-export const analyzeSalaryScreenshot = async (base64Image: string): Promise<{ details: SalaryDetail[], year?: number, month?: number }> => {
-  if (!apiKey) return { details: [] };
+export const analyzeSalaryScreenshots = async (base64Images: string[]): Promise<{ details: SalaryDetail[], year?: number, month?: number, realWage?: number }> => {
+  if (!apiKey || base64Images.length === 0) return { details: [] };
 
   try {
     const model = 'gemini-2.5-flash';
-    const compressedDataUrl = await compressImage(base64Image);
-    const parts = compressedDataUrl.split(',');
-    const cleanBase64 = parts.length > 1 ? parts[1] : compressedDataUrl;
+    
+    const imageParts = await Promise.all(base64Images.map(async (img) => {
+        const compressed = await compressImage(img);
+        const parts = compressed.split(',');
+        const cleanBase64 = parts.length > 1 ? parts[1] : compressed;
+        return { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } };
+    }));
 
     const prompt = `
-      Analyze this image of a salary slip, bank transaction, or payroll screenshot.
-      
+      Analyze these ${base64Images.length} screenshot(s) of a salary slip.
+
       TASK: 
-      1. Identify the billing cycle (Year and Month).
-      2. Extract **ALL** visible salary breakdown items (names and amounts).
+      1. **Billing Cycle**: Identify Year and Month.
+      2. **Real Wage (Task 1)**: Identify the FINAL amount paid to the user. Look for keywords like "实发", "实发工资", "实发合计", "打卡金额", "Net Pay". This is the most important number.
+      3. **Details (Task 2 & 3)**: Extract ALL unique salary items.
       
-      RULES:
-      - **Do not** limit to specific fields like "basic salary". 
-      - Extract ANY numeric item that looks like a component of the salary (e.g., "Housing Subsidy", "Performance Bonus", "Tax Deduction", "Social Security", "Overtime Pay").
-      - Return the exact name found in the image for the 'name' field.
-      - Ensure 'amount' is a number. If it's a deduction (e.g., Tax), make it negative or keep it positive as it appears, but usually salary slips show absolute numbers. Let's keep them positive unless explicitly marked with a minus sign in the image.
+      RULES FOR DETAILS:
+      - **Deductions**: If an item is a deduction (e.g., "Tax", "Social Security", "Provident Fund", "个税", "五险一金", "扣款", "养老保险"), the amount MUST be NEGATIVE.
+      - **Earnings**: If an item is income (e.g., "Basic Salary", "Bonus", "Subsidy", "应发", "基本工资"), the amount MUST be POSITIVE.
+      - **Clean Numbers**: DO NOT include "+" or "-" signs in the 'name'. ONLY put the sign in the 'amount' value.
+      - **Merge**: Deduplicate items if they appear in multiple images.
       
-      Output JSON with 'year', 'month', and a 'details' array containing objects with 'name' and 'amount'.
+      Output JSON with 'year', 'month', 'realWage' (number), and 'details' array.
     `;
 
     const result = await ai.models.generateContent({
         model: model,
         contents: {
             parts: [
-            { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } },
-            { text: prompt }
+              ...imageParts,
+              { text: prompt }
             ]
         },
         config: {
@@ -185,13 +190,14 @@ export const analyzeSalaryScreenshot = async (base64Image: string): Promise<{ de
             properties: {
                 year: { type: "NUMBER" },
                 month: { type: "NUMBER" },
+                realWage: { type: "NUMBER", description: "The final net pay amount (实发工资)" },
                 details: {
                   type: "ARRAY",
                   items: {
                     type: "OBJECT",
                     properties: {
                       name: { type: "STRING" },
-                      amount: { type: "NUMBER" }
+                      amount: { type: "NUMBER", description: "Positive for income, negative for deductions" }
                     },
                     required: ["name", "amount"]
                   }
@@ -202,7 +208,6 @@ export const analyzeSalaryScreenshot = async (base64Image: string): Promise<{ de
         }
     });
 
-    // [FIX] Robust way to get text, avoiding .text() function call error
     const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!text) {
@@ -210,7 +215,7 @@ export const analyzeSalaryScreenshot = async (base64Image: string): Promise<{ de
         return { details: [] };
     }
     
-    return JSON.parse(text) as { details: SalaryDetail[], year?: number, month?: number };
+    return JSON.parse(text) as { details: SalaryDetail[], year?: number, month?: number, realWage?: number };
 
   } catch (error) {
     console.error("Salary Analysis Failed:", error);
