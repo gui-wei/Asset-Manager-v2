@@ -2,7 +2,13 @@ import { GoogleGenAI } from "@google/genai";
 import { SalaryDetail } from '../types';
 
 // Initialize the client
-const apiKey = process.env.API_KEY || 'AIzaSyCJdgOOO4DAyqxmZabUx1-FcyB5Guq0g-U';
+// ---------------------------------------------------------------------------
+// [配置指南] API Key 填写位置
+// 方式 1 (推荐 - 安全): 不修改代码。在项目根目录创建 .env 文件，写入 GEMINI_API_KEY=你的Key
+// 方式 2 (简单 - 仅本地测试): 直接将下面的 '' 替换为你的 Key 字符串
+// 例如: const apiKey = process.env.API_KEY || 'AIzaSyCcWjG9ef...'; 
+// ---------------------------------------------------------------------------
+const apiKey = process.env.API_KEY || 'AIzaSyCJdgOOO4DAyqxmZabUx1-FcyB5Guq0g-U'; 
 const ai = new GoogleGenAI({ apiKey });
 
 export interface EarningsRecord {
@@ -118,8 +124,14 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
         }
     });
 
-    const text = result.text();
-    if (!text) return [];
+    // [FIX] Robust way to get text, avoiding .text() function call error
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!text) {
+        console.warn("Gemini returned empty response");
+        return [];
+    }
+    
     const parsed = JSON.parse(text) as { records: AIAssetRecord[] };
     return parsed.records || [];
 
@@ -190,8 +202,14 @@ export const analyzeSalaryScreenshot = async (base64Image: string): Promise<{ de
         }
     });
 
-    const text = result.text();
-    if (!text) return { details: [] };
+    // [FIX] Robust way to get text, avoiding .text() function call error
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!text) {
+        console.warn("Salary Analysis: Empty response from AI");
+        return { details: [] };
+    }
+    
     return JSON.parse(text) as { details: SalaryDetail[], year?: number, month?: number };
 
   } catch (error) {
