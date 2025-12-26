@@ -26,15 +26,14 @@ const getIconForName = (name: string) => {
   return Coins; // 默认图标
 };
 
-// 智能匹配颜色 (Task 2 & 3: Red for deductions, Green/Blue for income)
+// 智能匹配颜色 (扣款为红，收入为默认/绿)
 const getColorForName = (name: string, amount: number) => {
   // Priority: Check amount first. Negative = Red.
   if (amount < 0) return 'text-red-500 bg-red-50';
   
-  // Fallback to name-based logic if amount is positive but name suggests deduction (should happen less now with AI fix)
+  // Fallback to name-based logic if amount is positive but name suggests deduction 
   const n = name.toLowerCase();
   if (n.includes('扣') || n.includes('税') || n.includes('险') || n.includes('金')) {
-      // It might be a deduction shown as positive in some contexts, but let's stick to standard colors
       return 'text-orange-500 bg-orange-50'; 
   }
   
@@ -50,38 +49,26 @@ const DetailRow: React.FC<{
   const Icon = getIconForName(detail.name);
   const colorClass = getColorForName(detail.name, detail.amount);
   
-  // Task 3: Only show "+" for positive, "-" is handled by the number itself (but we can format explicitly)
-  // Logic: 
-  // - If amount < 0, it already has "-".
-  // - If amount > 0, we add "+" only if it's strictly an "Income" type (standard salary view). 
-  //   However, user requested: "only add '-' if it's 'deduction' text, only add '+' if it's 'payable/net' text".
-  //   Actually, standard accounting usually just shows negative numbers with -. 
-  //   Let's follow the simpler visual cue: 
-  //   If amount is negative -> Show as is (e.g. -500)
-  //   If amount is positive -> Show with + (e.g. +5000) for better contrast, OR follow specific user request.
-  
-  // User Request Refinement: 
-  // "Cancel '+' or '-' in front of amount unless..."
-  // 1. If text contains "扣除" (deduction) -> Add "-" (Ensure amount is negative visually)
-  // 2. If text contains "应发" (payable), "实发" (real) -> Add "+"
-  
+  // Task 3: 符号逻辑
+  // 1. 如果是负数（AI已处理为负数），保留原样显示（自带"-"）
+  // 2. 如果是正数，仅当包含 "应发"、"实发"、"收入" 等关键词时才加 "+"
   const n = detail.name.toLowerCase();
-  const isDeductionLike = n.includes('扣') || n.includes('税') || n.includes('险') || n.includes('金');
-  const isIncomeLike = n.includes('应发') || n.includes('实发') || n.includes('收入');
+  const isIncomeLike = n.includes('应发') || n.includes('实发') || n.includes('收入') || n.includes('合计');
 
-  // We rely on the amount's sign from data primarily, but for *display prefix*:
   let prefix = '';
-  if (isIncomeLike) prefix = '+';
-  else if (isDeductionLike && detail.amount > 0) prefix = '-'; // Visually force minus if positive amount but deduction name
+  if (detail.amount > 0 && isIncomeLike) prefix = '+';
   
-  // Formatting value:
-  // If we force prefix '-', we should show abs value to avoid double negative '--500'
-  const displayValue = (isDeductionLike && detail.amount > 0) 
-      ? detail.amount.toLocaleString(undefined, { minimumFractionDigits: 2 }) 
-      : Math.abs(detail.amount).toLocaleString(undefined, { minimumFractionDigits: 2 });
+  // 如果金额是正数但名字里带"扣"，强制显示负号（视觉修正，虽然AI应该已经处理为负数了）
+  const isDeductionName = n.includes('扣') || n.includes('税');
+  if (detail.amount > 0 && isDeductionName) {
+      prefix = '-'; 
+  }
+
+  // 计算显示数值
+  const displayValue = Math.abs(detail.amount).toLocaleString(undefined, { minimumFractionDigits: 2 });
   
-  // Final sign logic for rendering
-  const finalSign = (detail.amount < 0) ? '-' : prefix;
+  // 最终符号：如果是真负数，用 '-'；否则用计算出的 prefix
+  const finalSign = (detail.amount < 0 || prefix === '-') ? '-' : prefix;
 
   return (
     <div className="flex justify-between items-center py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors px-2 rounded-lg">
@@ -92,7 +79,7 @@ const DetailRow: React.FC<{
         <span className="text-sm text-gray-600 font-bold">{detail.name}</span>
       </div>
       <div className="flex items-center gap-2">
-        <span className={`font-mono font-bold text-sm ${detail.amount < 0 || isDeductionLike ? 'text-red-500' : 'text-gray-800'}`}>
+        <span className={`font-mono font-bold text-sm ${detail.amount < 0 || finalSign === '-' ? 'text-red-500' : 'text-gray-800'}`}>
           {finalSign}{displayValue}
         </span>
       </div>
