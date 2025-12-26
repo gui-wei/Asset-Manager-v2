@@ -24,8 +24,9 @@ export interface EarningsRecord {
 // Re-export as AIAssetRecord for compatibility
 export type AIAssetRecord = EarningsRecord;
 
-// Helper to compress image to avoid payload limits
-const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promise<string> => {
+// [FIX] Increased quality and dimensions for better OCR text recognition
+// 提高图片压缩上限，确保文字清晰度 (1024 -> 1600, 0.6 -> 0.8)
+const compressImage = (base64Str: string, maxWidth = 1600, quality = 0.8): Promise<string> => {
   return new Promise((resolve) => {
     if (!base64Str || !base64Str.startsWith('data:image')) {
         resolve(base64Str);
@@ -48,6 +49,7 @@ const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promi
         resolve(base64Str);
         return;
       }
+      // Fill white background for transparency safety
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, width, height);
       ctx.drawImage(img, 0, 0, width, height);
@@ -57,6 +59,13 @@ const compressImage = (base64Str: string, maxWidth = 1024, quality = 0.6): Promi
       resolve(base64Str);
     };
   });
+};
+
+// [FIX] Helper to remove markdown formatting if Gemini includes it
+// 强制清洗 JSON 字符串，防止 ```json 导致的解析错误
+const cleanJsonString = (str: string): string => {
+  if (!str) return '';
+  return str.replace(/```json/g, '').replace(/```/g, '').trim();
 };
 
 /**
@@ -124,14 +133,12 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
         }
     });
 
-    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawText) return [];
     
-    if (!text) {
-        console.warn("Gemini returned empty response");
-        return [];
-    }
-    
-    const parsed = JSON.parse(text) as { records: AIAssetRecord[] };
+    // [FIX] Clean and parse
+    const cleanText = cleanJsonString(rawText);
+    const parsed = JSON.parse(cleanText) as { records: AIAssetRecord[] };
     return parsed.records || [];
 
   } catch (error) {
@@ -143,7 +150,7 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
 /**
  * Task 1 [OPTIMIZED]: 薪资条识别 AI (自主判断字段)
  * Task 2: 多图去重
- * Task 3 [NEW]: 智能正负号与实发工资识别
+ * Task 3: 智能正负号与实发工资识别
  */
 export const analyzeSalaryScreenshots = async (base64Images: string[]): Promise<{ details: SalaryDetail[], year?: number, month?: number, realWage?: number }> => {
   if (!apiKey || base64Images.length === 0) return { details: [] };
@@ -208,17 +215,22 @@ export const analyzeSalaryScreenshots = async (base64Images: string[]): Promise<
         }
     });
 
-    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!text) {
+    if (!rawText) {
         console.warn("Salary Analysis: Empty response from AI");
         return { details: [] };
     }
     
-    return JSON.parse(text) as { details: SalaryDetail[], year?: number, month?: number, realWage?: number };
+    // [FIX] Robust parsing with cleaning and logging
+    console.log("Raw AI Response (Salary):", rawText); // Debugging
+    const cleanText = cleanJsonString(rawText);
+    
+    return JSON.parse(cleanText) as { details: SalaryDetail[], year?: number, month?: number, realWage?: number };
 
   } catch (error) {
     console.error("Salary Analysis Failed:", error);
+    // Return empty structure on error to prevent app crash
     return { details: [] };
   }
 };
