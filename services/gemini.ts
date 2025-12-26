@@ -3,10 +3,7 @@ import { SalaryDetail } from '../types';
 
 // Initialize the client
 // ---------------------------------------------------------------------------
-// [配置指南] API Key 填写位置
-// 方式 1 (推荐 - 安全): 不修改代码。在项目根目录创建 .env 文件，写入 GEMINI_API_KEY=你的Key
-// 方式 2 (简单 - 仅本地测试): 直接将下面的 '' 替换为你的 Key 字符串
-// 例如: const apiKey = process.env.API_KEY || 'AIzaSyCcWjG9ef...'; 
+// [配置指南] 请在 .env 文件中设置 GEMINI_API_KEY
 // ---------------------------------------------------------------------------
 const apiKey = process.env.API_KEY || ''; 
 const ai = new GoogleGenAI({ apiKey });
@@ -21,12 +18,10 @@ export interface EarningsRecord {
   assetType?: 'Fund' | 'Gold' | 'Other';
 }
 
-// Re-export as AIAssetRecord for compatibility
 export type AIAssetRecord = EarningsRecord;
 
-// [FIX] Increased quality and dimensions for better OCR text recognition
-// 提高图片压缩上限，确保文字清晰度 (1024 -> 1600, 0.6 -> 0.8)
-const compressImage = (base64Str: string, maxWidth = 1600, quality = 0.8): Promise<string> => {
+// [Refined] Image compression with better defaults for OCR
+const compressImage = (base64Str: string, maxWidth = 1600, quality = 0.85): Promise<string> => {
   return new Promise((resolve) => {
     if (!base64Str || !base64Str.startsWith('data:image')) {
         resolve(base64Str);
@@ -38,10 +33,13 @@ const compressImage = (base64Str: string, maxWidth = 1600, quality = 0.8): Promi
       const canvas = document.createElement('canvas');
       let width = img.width;
       let height = img.height;
+      
+      // Preserve aspect ratio but limit max dimension
       if (width > maxWidth) {
         height = Math.round((height * maxWidth) / width);
         width = maxWidth;
       }
+      
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
@@ -49,23 +47,38 @@ const compressImage = (base64Str: string, maxWidth = 1600, quality = 0.8): Promi
         resolve(base64Str);
         return;
       }
-      // Fill white background for transparency safety
+      
+      // White background for transparency
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, width, height);
       ctx.drawImage(img, 0, 0, width, height);
       resolve(canvas.toDataURL('image/jpeg', quality));
     };
-    img.onerror = () => {
-      resolve(base64Str);
-    };
+    img.onerror = () => resolve(base64Str);
   });
 };
 
-// [FIX] Helper to remove markdown formatting if Gemini includes it
-// 强制清洗 JSON 字符串，防止 ```json 导致的解析错误
-const cleanJsonString = (str: string): string => {
-  if (!str) return '';
-  return str.replace(/```json/g, '').replace(/```/g, '').trim();
+// [Refined] JSON Extractor - robust against markdown blocks and extra text
+const extractJSON = (text: string): any => {
+  try {
+    // 1. Try direct parse
+    return JSON.parse(text);
+  } catch (e) {
+    // 2. Try extracting from markdown block ```json ...
+  if (jsonBlockMatch && jsonBlockMatch[1]) {
+      try { return JSON.parse(jsonBlockMatch[1]); } catch (e2) { /* continue */ }
+    }
+    
+    // 3. Try finding first '{' and last '}'
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start !== -1 && end !== -1) {
+      try { return JSON.parse(text.substring(start, end + 1)); } catch (e3) { /* continue */ }
+    }
+    
+    console.error("Failed to extract JSON from:", text);
+    throw new Error("No valid JSON found in response");
+  }
 };
 
 /**
@@ -89,7 +102,7 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
       TASK: Extract asset transactions or earnings.
       
       RULES:
-      1. **Product Name**: CRITICAL. Extract the full name (e.g., "易方达蓝筹精选").
+      1. **Product Name**: CRITICAL. Extract the full name.
       2. **Type**: 
          - 'deposit': Buying, Subscription, "买入", "申购确认".
          - 'earning': Daily profit, "收益", "盈亏", "+xx.xx".
@@ -106,39 +119,13 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
             { text: prompt }
             ]
         },
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-            type: "OBJECT",
-            properties: {
-                records: {
-                type: "ARRAY",
-                items: {
-                    type: "OBJECT",
-                    properties: {
-                    productName: { type: "STRING" },
-                    institution: { type: "STRING" },
-                    amount: { type: "NUMBER" },
-                    date: { type: "STRING" },
-                    type: { type: "STRING", enum: ["deposit", "earning"] },
-                    assetType: { type: "STRING", enum: ["Fund", "Gold", "Other"] },
-                    currency: { type: "STRING", enum: ["CNY", "USD", "HKD"] }
-                    },
-                    required: ["amount", "date", "type"]
-                }
-                }
-            },
-            required: ["records"],
-            }
-        }
+        config: { responseMimeType: "application/json" }
     });
 
     const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!rawText) return [];
     
-    // [FIX] Clean and parse
-    const cleanText = cleanJsonString(rawText);
-    const parsed = JSON.parse(cleanText) as { records: AIAssetRecord[] };
+    const parsed = extractJSON(rawText) as { records: AIAssetRecord[] };
     return parsed.records || [];
 
   } catch (error) {
@@ -148,9 +135,7 @@ export const analyzeEarningsScreenshot = async (base64Image: string): Promise<AI
 };
 
 /**
- * Task 1 [OPTIMIZED]: 薪资条识别 AI (自主判断字段)
- * Task 2: 多图去重
- * Task 3: 智能正负号与实发工资识别
+ * Task: 薪资识别 AI (重构版 - 支持批量)
  */
 export const analyzeSalaryScreenshots = async (base64Images: string[]): Promise<{ details: SalaryDetail[], year?: number, month?: number, realWage?: number }> => {
   if (!apiKey || base64Images.length === 0) return { details: [] };
@@ -158,6 +143,7 @@ export const analyzeSalaryScreenshots = async (base64Images: string[]): Promise<
   try {
     const model = 'gemini-2.5-flash';
     
+    // Prepare images
     const imageParts = await Promise.all(base64Images.map(async (img) => {
         const compressed = await compressImage(img);
         const parts = compressed.split(',');
@@ -165,21 +151,44 @@ export const analyzeSalaryScreenshots = async (base64Images: string[]): Promise<
         return { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } };
     }));
 
+    // [Chain of Thought Prompt]
     const prompt = `
-      Analyze these ${base64Images.length} screenshot(s) of a salary slip.
+      You are an expert OCR and financial data extraction AI.
+      Analyze these ${base64Images.length} salary slip screenshot(s).
 
-      TASK: 
-      1. **Billing Cycle**: Identify Year and Month.
-      2. **Real Wage (Task 1)**: Identify the FINAL amount paid to the user. Look for keywords like "实发", "实发工资", "实发合计", "打卡金额", "Net Pay". This is the most important number.
-      3. **Details (Task 2 & 3)**: Extract ALL unique salary items.
+      ### OBJECTIVE
+      Extract the "Real Wage" (Net Pay) and all individual salary components.
+
+      ### STEP-BY-STEP INSTRUCTIONS
+      1. **Identify Date**: Look for year and month (e.g., "2024年5月", "2024-05").
+      2. **Identify Real Wage (Target)**: Find the final amount paid to the employee. 
+         - Keywords: "实发", "实发工资", "实发合计", "打卡金额", "到手", "Net Pay".
+         - This is usually a prominent number at the bottom or top.
+      3. **Extract Details**: List every single line item with a monetary value.
+         - **Income**: Basic salary, bonus, allowance, subsidy, overtime, etc. (Positive values)
+         - **Deduction**: Tax, social security, provident fund, insurance, leave deduction. (Negative values)
+         - **Keywords for Deduction**: "扣", "税", "险", "金", "代扣".
       
-      RULES FOR DETAILS:
-      - **Deductions**: If an item is a deduction (e.g., "Tax", "Social Security", "Provident Fund", "个税", "五险一金", "扣款", "养老保险"), the amount MUST be NEGATIVE.
-      - **Earnings**: If an item is income (e.g., "Basic Salary", "Bonus", "Subsidy", "应发", "基本工资"), the amount MUST be POSITIVE.
-      - **Clean Numbers**: DO NOT include "+" or "-" signs in the 'name'. ONLY put the sign in the 'amount' value.
-      - **Merge**: Deduplicate items if they appear in multiple images.
+      ### RULES
+      - **Merge Duplicates**: If multiple screenshots cover the same slip, remove duplicates based on name and value.
+      - **Clean Names**: Remove symbols like "+", "-", ":" from the NAME. Keep the name clean (e.g., "基本工资" not "基本工资:").
+      - **Sign Logic**: 
+         - If it is a deduction (e.g. tax, insurance), make the amount NEGATIVE.
+         - If it is income, make the amount POSITIVE.
       
-      Output JSON with 'year', 'month', 'realWage' (number), and 'details' array.
+      ### OUTPUT FORMAT
+      Return PURE JSON.
+      {
+        "year": 2024,
+        "month": 5,
+        "realWage": 12345.67,
+        "details": [
+          { "name": "基本工资", "amount": 10000 },
+          { "name": "绩效奖金", "amount": 3000 },
+          { "name": "养老保险", "amount": -800 },
+          { "name": "个税", "amount": -150.5 }
+        ]
+      }
     `;
 
     const result = await ai.models.generateContent({
@@ -190,29 +199,7 @@ export const analyzeSalaryScreenshots = async (base64Images: string[]): Promise<
               { text: prompt }
             ]
         },
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-            type: "OBJECT",
-            properties: {
-                year: { type: "NUMBER" },
-                month: { type: "NUMBER" },
-                realWage: { type: "NUMBER", description: "The final net pay amount (实发工资)" },
-                details: {
-                  type: "ARRAY",
-                  items: {
-                    type: "OBJECT",
-                    properties: {
-                      name: { type: "STRING" },
-                      amount: { type: "NUMBER", description: "Positive for income, negative for deductions" }
-                    },
-                    required: ["name", "amount"]
-                  }
-                }
-            },
-            required: ["details"]
-            }
-        }
+        config: { responseMimeType: "application/json" }
     });
 
     const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -222,15 +209,18 @@ export const analyzeSalaryScreenshots = async (base64Images: string[]): Promise<
         return { details: [] };
     }
     
-    // [FIX] Robust parsing with cleaning and logging
-    console.log("Raw AI Response (Salary):", rawText); // Debugging
-    const cleanText = cleanJsonString(rawText);
+    // Use the robust extractor
+    const data = extractJSON(rawText);
     
-    return JSON.parse(cleanText) as { details: SalaryDetail[], year?: number, month?: number, realWage?: number };
+    return {
+        details: data.details || [],
+        year: data.year,
+        month: data.month,
+        realWage: data.realWage
+    };
 
   } catch (error) {
     console.error("Salary Analysis Failed:", error);
-    // Return empty structure on error to prevent app crash
     return { details: [] };
   }
 };
