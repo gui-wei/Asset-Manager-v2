@@ -93,8 +93,8 @@ const AssetItem: React.FC<{
             <div className="flex justify-between items-center mb-3 px-1">
               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5"><History size={14} /> 资金明细</h4>
               <div className="flex items-center gap-2">
-                  <button onClick={(e) => { e.stopPropagation(); onDirectAIScan(); }} className="text-xs bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-full text-indigo-600 flex items-center gap-1.5 hover:bg-indigo-100 font-bold shadow-sm transition-colors"><Sparkles size={12} /> AI 录入</button>
-                  <button onClick={(e) => { e.stopPropagation(); setShowCalendar(true); }} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded-full text-gray-600 flex items-center gap-1.5 hover:bg-gray-100 font-medium shadow-sm transition-colors"><Calendar size={14} className="text-blue-500"/> 查看日历</button>
+                  <button onClick={(e) => { e.stopPropagation(); onDirectAIScan(); }} className="text-xs bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-full text-indigo-600 flex items-center gap-1.5 hover:bg-indigo-100 font-bold shadow-sm transition-colors whitespace-nowrap"><Sparkles size={12} /> AI 录入</button>
+                  <button onClick={(e) => { e.stopPropagation(); setShowCalendar(true); }} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded-full text-gray-600 flex items-center gap-1.5 hover:bg-gray-100 font-medium shadow-sm transition-colors whitespace-nowrap"><Calendar size={14} className="text-blue-500"/> 查看日历</button>
               </div>
             </div>
             <div className="space-y-3 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
@@ -102,23 +102,21 @@ const AssetItem: React.FC<{
                   const txCurrency = record.currency || (record.type === 'deposit' ? asset.currency : earningsCurrency);
                   const txSymbol = getSymbol(txCurrency);
                   const isDeposit = record.type === 'deposit';
-                  const isWithdrawal = record.type === 'withdrawal'; // Although type defines 'deposit'|'earning', safeguard for extensions
                   const isPositiveEarning = record.type === 'earning' && record.amount > 0;
                   
-                  // Simple color logic
                   let textColorClass = isDeposit ? 'text-blue-500' : (isPositiveEarning ? 'text-red-500' : 'text-green-600');
                   let dotColorClass = isDeposit ? 'bg-blue-500' : (isPositiveEarning ? 'bg-red-500' : 'bg-green-600');
 
                   return (
                     <div key={record.id} className="flex justify-between items-center text-sm bg-white p-3 rounded-lg shadow-sm border border-gray-100 group">
                       <div className="flex items-center gap-3">
-                        <div className={`w-1.5 h-1.5 rounded-full ${dotColorClass}`}></div>
-                        <span className="text-gray-400 text-xs">{record.date}</span>
-                        <div className="flex items-center gap-1">
-                            <span className="text-gray-700 font-medium truncate max-w-[80px] sm:max-w-[120px]">{record.description}</span>
+                        <div className={`w-1.5 h-1.5 rounded-full ${dotColorClass} shrink-0`}></div>
+                        <span className="text-gray-400 text-xs shrink-0">{record.date}</span>
+                        <div className="flex items-center gap-1 min-w-0">
+                            <span className="text-gray-700 font-medium truncate max-w-[100px]">{record.description}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 shrink-0">
                         <span className={`font-mono font-bold ${textColorClass}`}>
                             {record.type === 'earning' && record.amount > 0 ? '+' : ''}{txSymbol}{Math.abs(record.amount).toLocaleString()}
                         </span>
@@ -133,8 +131,8 @@ const AssetItem: React.FC<{
               }
             </div>
             <div className="mt-4 pt-3 border-t border-gray-100 flex gap-2">
-               <button onClick={(e) => { e.stopPropagation(); onEditInfo(); }} className="flex-1 flex items-center justify-center gap-1.5 text-xs text-blue-500 hover:text-blue-600 transition-colors py-2 rounded-lg hover:bg-blue-50 font-bold bg-blue-50/50 cursor-pointer"><Settings size={14} /><span>修改信息</span></button>
-               <button onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }} className="flex-1 flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors py-2 rounded-lg hover:bg-red-50 cursor-pointer"><Trash2 size={14} /><span>删除资产</span></button>
+               <button onClick={(e) => { e.stopPropagation(); onEditInfo(); }} className="flex-1 flex items-center justify-center gap-1.5 text-xs text-blue-500 hover:text-blue-600 transition-colors py-2 rounded-lg hover:bg-blue-50 font-bold bg-blue-50/50 cursor-pointer whitespace-nowrap"><Settings size={14} /><span>修改信息</span></button>
+               <button onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }} className="flex-1 flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors py-2 rounded-lg hover:bg-red-50 cursor-pointer whitespace-nowrap"><Trash2 size={14} /><span>删除资产</span></button>
             </div>
           </div>
         </div>
@@ -206,53 +204,35 @@ const AssetsPage: React.FC<AssetsPageProps> = ({
       <div className="mx-4 sm:mx-6 mb-6">
         <div className="bg-gradient-to-br from-gray-800 to-black text-white rounded-2xl p-6 shadow-xl relative overflow-hidden transition-all duration-500">
            <div className="flex justify-between items-center relative z-10">
-              <div>
+              <div className="flex-1 min-w-0">
                  <div className="flex items-center gap-2 mb-1">
                    <p className="text-gray-400 text-xs font-medium tracking-wide">总资产估值</p>
                    <button onClick={() => setDashboardCurrency(curr => curr === 'CNY' ? 'USD' : curr === 'USD' ? 'HKD' : 'CNY')} className="text-[10px] font-bold bg-white/10 px-1.5 py-0.5 rounded text-gray-300 hover:bg-white/20 transition flex items-center gap-0.5">{dashboardCurrency} <RefreshCw size={8} /></button>
                  </div>
-                 <h2 className="text-3xl sm:text-4xl font-bold mb-4 font-mono tracking-tight animate-fadeIn">
+                 <h2 className="text-3xl sm:text-4xl font-bold mb-4 font-mono tracking-tight animate-fadeIn truncate">
                    {dashboardCurrency === 'USD' ? '$' : dashboardCurrency === 'HKD' ? 'HK$' : '¥'} 
                    {privacyMode ? '****' : totalAssets.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                  </h2>
-                 <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
+                 <div className="grid grid-cols-2 gap-2">
                     <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
-                        <TrendingUp size={14} className="text-red-400" />
-                        <div>
+                        <TrendingUp size={14} className="text-red-400 shrink-0" />
+                        <div className="min-w-0">
                             <p className="text-[10px] text-gray-400 leading-none mb-0.5">累计收益</p>
-                            <p className="text-sm font-bold leading-none">{privacyMode ? '***' : (totalEarnings > 0 ? '+' : '') + totalEarnings.toLocaleString(undefined, {minimumFractionDigits: 0})}</p>
+                            <p className="text-sm font-bold leading-none truncate">{privacyMode ? '***' : (totalEarnings > 0 ? '+' : '') + totalEarnings.toLocaleString(undefined, {minimumFractionDigits: 0})}</p>
                         </div>
                     </div>
                     <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
-                        <Percent size={14} className="text-yellow-400" />
-                        <div>
-                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">持有收益率</p>
-                            <p className={`text-sm font-bold leading-none ${totalYield >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                        <Percent size={14} className="text-yellow-400 shrink-0" />
+                        <div className="min-w-0">
+                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">收益率</p>
+                            <p className={`text-sm font-bold leading-none truncate ${totalYield >= 0 ? 'text-red-400' : 'text-green-400'}`}>
                                 {totalYield >= 0 ? '+' : ''}{totalYield.toFixed(2)}%
-                            </p>
-                        </div>
-                    </div>
-                    <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
-                        <BarChart4 size={14} className="text-purple-400" />
-                        <div>
-                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">推测年化</p>
-                            <p className={`text-sm font-bold leading-none ${annualizedYield >= 0 ? 'text-red-400' : 'text-green-400'}`}>
-                                {daysInvested > 7 ? (annualizedYield >= 0 ? '+' : '') + annualizedYield.toFixed(2) + '%' : '--'}
-                            </p>
-                        </div>
-                    </div>
-                    <div className="bg-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md flex items-center gap-2 border border-white/5">
-                        <Clock size={14} className="text-blue-400" />
-                        <div>
-                            <p className="text-[10px] text-gray-400 leading-none mb-0.5">已投资</p>
-                            <p className="text-sm font-bold leading-none text-blue-100">
-                                {daysInvested} 天
                             </p>
                         </div>
                     </div>
                  </div>
               </div>
-              <div className="hidden sm:block w-32 h-32 relative"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={chartData} innerRadius="60%" outerRadius="100%" paddingAngle={5} dataKey="value" stroke="none">{chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie></PieChart></ResponsiveContainer></div>
+              <div className="hidden sm:block w-32 h-32 relative shrink-0"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={chartData} innerRadius="60%" outerRadius="100%" paddingAngle={5} dataKey="value" stroke="none">{chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie></PieChart></ResponsiveContainer></div>
            </div>
         </div>
       </div>
@@ -285,14 +265,14 @@ const AssetsPage: React.FC<AssetsPageProps> = ({
          }
       </div>
 
-      {/* Floating Action Button (FAB) - Positioned above BottomNav */}
-      <div className="fixed bottom-24 left-0 right-0 flex justify-center z-40 pointer-events-none">
+      {/* Floating Action Button (FAB) - Positioned relative to main container */}
+      <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-full max-w-md flex justify-center z-40 pointer-events-none">
         <div className="pointer-events-auto bg-gray-900 text-white rounded-full shadow-2xl flex items-center p-1.5 px-6 gap-0 backdrop-blur-xl bg-opacity-95 hover:scale-105 transition duration-200">
-          <button onClick={onOpenAdd} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70">
+          <button onClick={onOpenAdd} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70 whitespace-nowrap">
             <Plus size={18} className="text-blue-400" /> <span>记一笔</span>
           </button>
           <div className="w-px h-5 bg-gray-700 mx-1"></div>
-          <button onClick={() => onOpenScan('global')} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70">
+          <button onClick={() => onOpenScan('global')} className="flex items-center gap-2 font-bold text-sm sm:text-base py-2 px-4 active:opacity-70 whitespace-nowrap">
             <Camera size={18} className="text-blue-400" /> <span>AI 识别</span>
           </button>
         </div>
