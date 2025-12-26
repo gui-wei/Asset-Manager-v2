@@ -5,7 +5,7 @@ import { SalaryDetail } from '../types';
 // ---------------------------------------------------------------------------
 // [配置指南] 请在 .env 文件中设置 GEMINI_API_KEY
 // ---------------------------------------------------------------------------
-const apiKey = process.env.API_KEY || ''; 
+const apiKey = process.env.API_KEY || 'AIzaSyCJdgOOO4DAyqxmZabUx1-FcyB5Guq0g-U'; 
 const ai = new GoogleGenAI({ apiKey });
 
 export interface EarningsRecord {
