@@ -9,13 +9,14 @@ interface BottomNavProps {
 const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onChange }) => {
   const navItems = [
     { id: 'invest', label: '投资', icon: Wallet },
-    { id: 'salary', label: '薪资', icon: Banknote }, // Changed from NotebookPen to Banknote for Salary
+    { id: 'salary', label: '薪资', icon: Banknote },
     { id: 'analysis', label: '分析', icon: TrendingUp },
     { id: 'me', label: '我的', icon: User },
   ] as const;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-xl border-t border-gray-200 pb-safe pt-2 px-6 shadow-[0_-5px_20px_rgba(0,0,0,0.03)]">
+    // [UPDATED] Fixed positioning relative to the centered app container
+    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-50 bg-white/90 backdrop-blur-xl border-t border-gray-200 pb-safe pt-2 px-6 shadow-[0_-5px_20px_rgba(0,0,0,0.03)]">
       <div className="flex justify-between items-center max-w-md mx-auto">
         {navItems.map((item) => {
           const isActive = activeTab === item.id;
