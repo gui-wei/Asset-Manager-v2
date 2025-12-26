@@ -243,10 +243,12 @@ const AddSalaryModal: React.FC<{
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-slideUp max-h-[90vh] overflow-y-auto flex flex-col">
+      <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-slideUp max-h-[90vh] overflow-y-auto flex flex-col relative">
+        {/* [TASK 3] Close Button for Salary Modal */}
+        <button onClick={onClose} className="absolute right-6 top-6 p-1 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors z-10"><X size={20} className="text-gray-500" /></button>
+
         <div className="flex justify-between items-center mb-6 shrink-0">
           <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Plus size={24} className="text-indigo-600" /> 记一笔薪资</h2>
-          <button onClick={onClose}><X size={24} className="text-gray-400" /></button>
         </div>
 
         <div className="mb-6 shrink-0 flex justify-between gap-4">
@@ -489,7 +491,6 @@ export default function App() {
   const handleSalaryAIUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length || !user) return;
     setIsProcessingAI(true);
-    // [TASK 3] Close manual modal when scan starts
     setShowSalaryAddModal(false);
     try {
       const base64Images = await Promise.all(Array.from(e.target.files).map(file => new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result as string); reader.onerror = reject; reader.readAsDataURL(file); })));
@@ -532,6 +533,17 @@ export default function App() {
   const handleSaveAssetInfo = async (updatedAsset: Asset) => { if (!user) return; const { id, currentAmount, totalEarnings, dailyEarnings, history, ...rest } = updatedAsset; await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', id), rest); setEditingAssetInfo(null); };
   const executeDeleteAsset = async () => { if (!confirmDeleteAssetId || !user) return; await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'assets', confirmDeleteAssetId)); setConfirmDeleteAssetId(null); };
 
+  // [NEW] Global FAB Click Handler
+  const handleFabClick = () => {
+    if (activeTab === 'salary') {
+      setScannedSalaryData(undefined);
+      setShowSalaryAddModal(true);
+    } else {
+      // Default to invest for other tabs or specifically invest tab
+      setShowAddModal(true);
+    }
+  };
+
   if (authLoading) return <div className="min-h-screen flex items-center justify-center bg-[#ededed]"><Loader2 className="animate-spin text-gray-400" size={32} /></div>;
   if (!user) return <AuthScreen />;
 
@@ -543,8 +555,34 @@ export default function App() {
         
         {/* Main Content Area */}
         <div className="pb-24">
-          {activeTab === 'invest' && (<AssetsPage assets={assets} dashboardCurrency={dashboardCurrency} setDashboardCurrency={setDashboardCurrency} onOpenAdd={() => setShowAddModal(true)} onOpenScan={(mode) => { setScanTargetId('auto'); setManualInstitution(''); setManualCurrency(''); setManualProductName(''); setShowScanModal(true); setLastProcessedCount(0); }} onEditAsset={(asset) => setEditingAssetInfo(asset)} onDeleteAsset={(id) => setConfirmDeleteAssetId(id)} onEditTransaction={(assetId, tx) => setEditingTransaction({ assetId, transaction: tx })} onDeleteTransaction={handleDeleteSpecificTransaction} privacyMode={privacyMode} />)}
-          {activeTab === 'salary' && (<SalaryPage salaryRecords={salaryRecords} onOpenAdd={() => { setScannedSalaryData(undefined); setShowSalaryAddModal(true); }} onOpenScan={() => setShowSalaryScanModal(true)} onDeleteRecord={handleDeleteSalary} />)}
+          {activeTab === 'invest' && (
+            <AssetsPage 
+              assets={assets} 
+              dashboardCurrency={dashboardCurrency} 
+              setDashboardCurrency={setDashboardCurrency} 
+              onOpenAdd={() => setShowAddModal(true)} 
+              onOpenScan={(mode) => { 
+                  setScanTargetId('auto'); 
+                  setManualInstitution(''); 
+                  setManualCurrency(''); 
+                  setShowScanModal(true); 
+                  setLastProcessedCount(0); 
+              }} 
+              onEditAsset={(asset) => setEditingAssetInfo(asset)} 
+              onDeleteAsset={(id) => setConfirmDeleteAssetId(id)} 
+              onEditTransaction={(assetId, tx) => setEditingTransaction({ assetId, transaction: tx })} 
+              onDeleteTransaction={handleDeleteSpecificTransaction} 
+              privacyMode={privacyMode} 
+            />
+          )}
+          {activeTab === 'salary' && (
+            <SalaryPage 
+              salaryRecords={salaryRecords} 
+              onOpenAdd={() => { setScannedSalaryData(undefined); setShowSalaryAddModal(true); }} 
+              onOpenScan={() => setShowSalaryScanModal(true)} 
+              onDeleteRecord={handleDeleteSalary} 
+            />
+          )}
           {activeTab === 'analysis' && <AnalysisPage />}
           {activeTab === 'me' && <ProfilePage user={user} onLogout={() => signOut(auth)} />}
         </div>
@@ -553,7 +591,6 @@ export default function App() {
 
         <AIScanModal isOpen={showScanModal} onClose={() => !isProcessingAI && setShowScanModal(false)} onUpload={() => fileInputRef.current?.click()} isProcessing={isProcessingAI} assets={assets} targetAssetId={scanTargetId} setTargetAssetId={setScanTargetId} manualCurrency={manualCurrency} setManualCurrency={setManualCurrency} manualInstitution={manualInstitution} setManualInstitution={setManualInstitution} manualProductName={manualProductName} setManualProductName={setManualProductName} lastProcessedCount={lastProcessedCount} />
         
-        {/* [TASK 3] Updated Props for AddSalaryModal */}
         <AddSalaryModal 
           isOpen={showSalaryAddModal} 
           onClose={() => setShowSalaryAddModal(false)} 
@@ -563,19 +600,55 @@ export default function App() {
         />
         <AISalaryScanModal isOpen={showSalaryScanModal} onClose={() => !isProcessingAI && setShowSalaryScanModal(false)} onUpload={() => salaryFileInputRef.current?.click()} isProcessing={isProcessingAI} manualDate={manualSalaryDate} setManualDate={setManualSalaryDate} />
         
-        {showAddModal && <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn"><div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-slideUp"><h2 className="text-xl font-bold mb-6 text-gray-800 text-center">记录新资产</h2>
+        {showAddModal && (
+          <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-slideUp relative">
+              <h2 className="text-xl font-bold mb-6 text-gray-800 text-center">记录新资产</h2>
+              
+              {/* [TASK 2] Updated Close Button */}
+              <button onClick={() => setShowAddModal(false)} className="absolute right-6 top-6 p-1 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"><X size={20} className="text-gray-500" /></button>
+              
+              <div className="space-y-4">
+                <SmartInput label="投资渠道" placeholder="例如：支付宝" value={newAsset.institution} onChange={(v) => setNewAsset({...newAsset, institution: v})} suggestions={['支付宝', '微信理财通', '招商银行', '工商银行']} />
+                <SmartInput label="产品名称" placeholder="例如：易方达蓝筹" value={newAsset.productName} onChange={(v) => setNewAsset({...newAsset, productName: v})} suggestions={getUniqueProductNames(assets)} />
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="block text-gray-500 text-xs font-bold mb-1.5">记录日期</label><input type="date" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" value={newAsset.date} onChange={(e) => setNewAsset({...newAsset, date: e.target.value})} /></div>
+                  <div><label className="block text-gray-500 text-xs font-bold mb-1.5">资产类型</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm appearance-none" value={newAsset.type} onChange={(e) => setNewAsset({...newAsset, type: e.target.value as AssetType})}><option value={AssetType.FUND}>基金</option><option value={AssetType.STOCK}>股票</option><option value={AssetType.GOLD}>黄金</option><option value={AssetType.OTHER}>其他</option></select></div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="block text-gray-500 text-xs font-bold mb-1.5">货币种类</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm appearance-none font-bold" value={newAsset.currency} onChange={(e) => setNewAsset({...newAsset, currency: e.target.value as Currency})}><option value="CNY">CNY</option><option value="USD">USD</option><option value="HKD">HKD</option></select></div>
+                  <div><label className="block text-gray-500 text-xs font-bold mb-1.5">金额</label><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-lg font-bold" placeholder="0.00" value={newAsset.amount} onChange={(e) => setNewAsset({...newAsset, amount: e.target.value})} /></div>
+                </div>
+                <div className="flex gap-4">
+                  <div className="flex-1"><label className="block text-gray-500 text-xs font-bold mb-1.5">年化 (%)</label><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" placeholder="2.5" value={newAsset.yield} onChange={(e) => setNewAsset({...newAsset, yield: e.target.value})} /></div>
+                  <div className="flex-[2]"><label className="block text-gray-500 text-xs font-bold mb-1.5">备注</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" placeholder="选填" value={newAsset.remark} onChange={(e) => setNewAsset({...newAsset, remark: e.target.value})} /></div>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-8">
+                {/* [TASK 2] Cancel button replaced with AI Scan */}
+                <button onClick={() => fileInputRef.current?.click()} className="flex-1 py-3.5 rounded-xl bg-indigo-50 text-indigo-600 font-bold text-sm flex items-center justify-center gap-2 border border-indigo-100 hover:bg-indigo-100 active:scale-95 transition-all"><Camera size={18} /> AI 识别投资</button>
+                <button onClick={handleAddAsset} className="flex-1 py-3.5 rounded-xl bg-gray-900 text-white font-bold text-sm shadow-lg hover:bg-black active:scale-95 transition-all">确认</button>
+              </div>
+            </div>
+          </div>
+        )}
         
-        {/* [TASK 2] Updated Close Button */}
-        <button onClick={() => setShowAddModal(false)} className="absolute right-6 top-6 p-1 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"><X size={20} className="text-gray-500" /></button>
-        
-        <div className="space-y-4"><SmartInput label="投资渠道" placeholder="例如：支付宝" value={newAsset.institution} onChange={(v) => setNewAsset({...newAsset, institution: v})} suggestions={['支付宝', '微信理财通', '招商银行', '工商银行']} /><SmartInput label="产品名称" placeholder="例如：易方达蓝筹" value={newAsset.productName} onChange={(v) => setNewAsset({...newAsset, productName: v})} suggestions={getUniqueProductNames(assets)} /><div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-500 text-xs font-bold mb-1.5">记录日期</label><input type="date" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" value={newAsset.date} onChange={(e) => setNewAsset({...newAsset, date: e.target.value})} /></div><div><label className="block text-gray-500 text-xs font-bold mb-1.5">资产类型</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm appearance-none" value={newAsset.type} onChange={(e) => setNewAsset({...newAsset, type: e.target.value as AssetType})}><option value={AssetType.FUND}>基金</option><option value={AssetType.STOCK}>股票</option><option value={AssetType.GOLD}>黄金</option><option value={AssetType.OTHER}>其他</option></select></div></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-500 text-xs font-bold mb-1.5">货币种类</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm appearance-none font-bold" value={newAsset.currency} onChange={(e) => setNewAsset({...newAsset, currency: e.target.value as Currency})}><option value="CNY">CNY</option><option value="USD">USD</option><option value="HKD">HKD</option></select></div><div><label className="block text-gray-500 text-xs font-bold mb-1.5">金额</label><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-lg font-bold" placeholder="0.00" value={newAsset.amount} onChange={(e) => setNewAsset({...newAsset, amount: e.target.value})} /></div></div><div className="flex gap-4"><div className="flex-1"><label className="block text-gray-500 text-xs font-bold mb-1.5">年化 (%)</label><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" placeholder="2.5" value={newAsset.yield} onChange={(e) => setNewAsset({...newAsset, yield: e.target.value})} /></div><div className="flex-[2]"><label className="block text-gray-500 text-xs font-bold mb-1.5">备注</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" placeholder="选填" value={newAsset.remark} onChange={(e) => setNewAsset({...newAsset, remark: e.target.value})} /></div></div><div className="flex gap-3 mt-8">
-        {/* [TASK 2] Cancel button replaced with AI Scan */}
-        <button onClick={() => fileInputRef.current?.click()} className="flex-1 py-3.5 rounded-xl bg-indigo-50 text-indigo-600 font-bold text-sm flex items-center justify-center gap-2 border border-indigo-100 hover:bg-indigo-100 active:scale-95 transition-all"><Camera size={18} /> AI 识别投资</button>
-        <button onClick={handleAddAsset} className="flex-1 py-3.5 rounded-xl bg-gray-900 text-white font-bold text-sm shadow-lg hover:bg-black active:scale-95 transition-all">确认</button></div></div></div>}
         {editingAssetInfo && <EditAssetInfoModal asset={editingAssetInfo} onSave={handleSaveAssetInfo} onClose={() => setEditingAssetInfo(null)} />}
         {editingTransaction && <EditTransactionModal transaction={editingTransaction.transaction} onSave={handleUpdateTransaction} onDelete={() => handleDeleteTransaction(editingTransaction.transaction.id)} onClose={() => setEditingTransaction(null)} />}
         {confirmDeleteAssetId && <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn"><div className="bg-white w-full max-w-xs rounded-2xl p-6 shadow-2xl"><div className="flex flex-col items-center text-center mb-6"><div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4"><AlertTriangle size={24} className="text-red-500" /></div><h3 className="text-lg font-bold text-gray-800">确认删除该资产？</h3><p className="text-sm text-gray-500 mt-2">删除后，该资产的所有历史记录和收益明细将无法恢复。</p></div><div className="flex gap-3"><button onClick={() => setConfirmDeleteAssetId(null)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm">取消</button><button onClick={executeDeleteAsset} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold text-sm">确认删除</button></div></div></div>}
         {showGuide && <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-6 animate-fadeIn"><div className="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl"><h2 className="text-2xl font-bold text-gray-800 mb-6">使用说明</h2><div className="space-y-4 text-gray-600 text-sm leading-relaxed"><ul className="list-disc pl-5 space-y-2"><li><strong>货币切换</strong>：点击顶部总资产旁的货币符号，可切换 CNY/USD/HKD 显示。</li><li><strong>混合货币支持</strong>：支持本金和收益使用不同的货币。</li><li><strong>记录资产</strong>：点击底部“记一笔”添加资产。</li><li><strong>AI 智能识别</strong>：支持上传支付宝/银行App的截图，自动识别资产和收益。</li></ul></div><button onClick={() => setShowGuide(false)} className="mt-8 w-full py-3 bg-gray-900 text-white font-bold rounded-xl active:scale-95 transition">开始使用</button></div></div>}
+        
+        {/* [TASK 1] Global FAB */}
+        {(activeTab === 'invest' || activeTab === 'salary') && (
+          <div className="fixed bottom-24 right-6 z-40">
+            <button 
+              onClick={handleFabClick} 
+              className="bg-gray-900 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-300 shadow-indigo-500/30"
+            >
+              <Plus size={28} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
