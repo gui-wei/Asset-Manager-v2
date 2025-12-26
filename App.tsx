@@ -35,7 +35,7 @@ import ProfilePage from './src/pages/ProfilePage';
 import SalaryPage from './src/pages/SalaryPage';
 import SmartInput from './components/SmartInput';
 
-// [FIX] Updated import to use analyzeSalaryScreenshots instead of analyzeSalaryScreenshot
+// [FIX] Correct Import for analyzeSalaryScreenshots (Plural)
 import { analyzeEarningsScreenshot, analyzeSalaryScreenshots, AIAssetRecord } from './services/gemini';
 import { Asset, Transaction, AssetType, Currency, SalaryRecord, SalaryDetail } from './types';
 
@@ -185,7 +185,7 @@ const AuthScreen: React.FC = () => {
   );
 };
 
-// [UPDATED] AddSalaryModal - Now handles realWage logic
+// [UPDATED] AddSalaryModal - Supports dynamic details and manual Total override
 const AddSalaryModal: React.FC<{ 
   isOpen: boolean; 
   onClose: () => void; 
@@ -200,7 +200,7 @@ const AddSalaryModal: React.FC<{
     { name: '绩效奖金', amount: 0 }
   ]);
   
-  // New state for manual override of total
+  // State for manual override of total
   const [manualTotal, setManualTotal] = useState<number | null>(null);
 
   useEffect(() => {
@@ -208,7 +208,7 @@ const AddSalaryModal: React.FC<{
         if(initialData.date) setDate(initialData.date);
         if(initialData.remark) setRemark(initialData.remark);
         if(initialData.details) setDetails(initialData.details);
-        // If realWage is provided by AI, use it as manualTotal, otherwise calculate
+        // If realWage is provided by AI, use it as manualTotal
         if (initialData.realWage !== undefined) {
              setManualTotal(initialData.realWage);
         } else {
@@ -306,14 +306,12 @@ const AddSalaryModal: React.FC<{
           </div>
 
           <button onClick={() => {
-              // Pass manualTotal explicitly to the saver if it exists
-              // We'll modify the onSave interface on the fly or rely on parent handling
-              // For now, let's just pass the data, and we'll handle the 'total' calculation in App.tsx using realWage logic
               onSave({
                   date,
                   details: details.filter(d => d.name && d.amount !== 0),
                   remark,
-                  // @ts-ignore: Temporary hack to pass realWage up
+                  // Pass realWage implicitly
+                  // @ts-ignore
                   realWage: manualTotal !== null ? manualTotal : undefined
               });
               onClose();
@@ -329,7 +327,7 @@ const AddSalaryModal: React.FC<{
   );
 };
 
-// ... (AIScanModal & AISalaryScanModal components remain largely same, just ensuring correct props)
+// ... (AIScanModal & Edit Modals remain same, including for brevity but key logic is in AddSalaryModal and App)
 const AIScanModal: React.FC<{
   isOpen: boolean; onClose: () => void; onUpload: () => void; isProcessing: boolean;
   assets: Asset[]; targetAssetId: string; setTargetAssetId: (id: string) => void;
@@ -386,7 +384,7 @@ const AISalaryScanModal: React.FC<{
   );
 };
 
-// ... (Other Edit Modals remain same)
+// ... (Edit Transaction & Asset Info Modals - standard inputs)
 const EditTransactionModal: React.FC<{ transaction: Transaction; onSave: (t: Transaction) => void; onDelete: () => void; onClose: () => void }> = ({ transaction, onSave, onDelete, onClose }) => {
   const [date, setDate] = useState(transaction.date);
   const [amountStr, setAmountStr] = useState(transaction.amount.toString());
@@ -398,7 +396,7 @@ const EditTransactionModal: React.FC<{ transaction: Transaction; onSave: (t: Tra
 const EditAssetInfoModal: React.FC<{ asset: Asset; onSave: (asset: Asset) => void; onClose: () => void; }> = ({ asset, onSave, onClose }) => {
   const [formData, setFormData] = useState({ institution: asset.institution, productName: asset.productName, type: asset.type, currency: asset.currency, earningsCurrency: asset.earningsCurrency || asset.currency, sevenDayYield: asset.sevenDayYield?.toString() || '', remark: asset.remark || '' });
   const handleSave = () => onSave({ ...asset, ...formData, sevenDayYield: parseFloat(formData.sevenDayYield) || 0, currency: formData.currency as Currency, earningsCurrency: formData.earningsCurrency as Currency, type: formData.type as AssetType });
-  return (<div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn"><div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl animate-slideUp"><div className="flex justify-between items-center mb-6"><h2 className="text-lg font-bold text-gray-800">修改资产信息</h2><button onClick={onClose}><X size={20} className="text-gray-400" /></button></div><div className="space-y-4"><div><label className="block text-gray-500 text-xs font-bold mb-1.5">投资渠道</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={formData.institution} onChange={(e) => setFormData({ ...formData, institution: e.target.value })} /></div><div><label className="block text-gray-500 text-xs font-bold mb-1.5">产品名称</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={formData.productName} onChange={(e) => setFormData({ ...formData, productName: e.target.value })} /></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-500 text-xs font-bold mb-1.5">资产类型</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none transition-all" value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value as AssetType })}><option value={AssetType.FUND}>基金</option><option value={AssetType.STOCK}>股票</option><option value={AssetType.GOLD}>黄金</option><option value={AssetType.OTHER}>其他</option></select></div><div><label className="block text-gray-500 text-xs font-bold mb-1.5">本金货币</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none font-bold transition-all" value={formData.currency} onChange={(e) => setFormData({ ...formData, currency: e.target.value as Currency })}><option value="CNY">CNY (人民币)</option><option value="USD">USD (美元)</option><option value="HKD">HKD (港币)</option></select></div></div><div><label className="block text-gray-500 text-xs font-bold mb-1.5 flex items-center gap-2">收益货币</label><div className="relative"><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none font-bold transition-all" value={formData.earningsCurrency} onChange={(e) => setFormData({ ...formData, earningsCurrency: e.target.value as Currency })}><option value="CNY">CNY (人民币)</option><option value="USD">USD (美元)</option><option value="HKD">HKD (港币)</option></select><ArrowRightLeft size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" /></div></div><div className="flex gap-4"><div className="flex-1"><label className="block text-gray-500 text-xs font-bold mb-1.5">年化 (%)</label><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" value={formData.sevenDayYield} onChange={(e) => setFormData({ ...formData, sevenDayYield: e.target.value })} /></div><div className="flex-[2]"><label className="block text-gray-500 text-xs font-bold mb-1.5">备注</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" value={formData.remark} onChange={(e) => setFormData({ ...formData, remark: e.target.value })} /></div></div></div><div className="flex gap-3 mt-8"><button onClick={onClose} className="flex-1 py-3.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-sm hover:bg-gray-200 transition-colors">取消</button><button onClick={handleSave} className="flex-1 py-3.5 rounded-xl bg-gray-900 text-white font-bold text-sm shadow-lg hover:bg-black transition-colors">保存修改</button></div></div></div>);
+  return (<div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn"><div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl animate-slideUp"><div className="flex justify-between items-center mb-6"><h2 className="text-lg font-bold text-gray-800">修改资产信息</h2><button onClick={onClose}><X size={20} className="text-gray-400" /></button></div><div className="space-y-4"><div><label className="block text-gray-500 text-xs font-bold mb-1.5">投资渠道</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={formData.institution} onChange={(e) => setFormData({ ...formData, institution: e.target.value })} /></div><div><label className="block text-gray-500 text-xs font-bold mb-1.5">产品名称</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={formData.productName} onChange={(e) => setFormData({ ...formData, productName: e.target.value })} /></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-gray-500 text-xs font-bold mb-1.5">资产类型</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none transition-all" value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value as AssetType })}><option value={AssetType.FUND}>基金</option><option value={AssetType.STOCK}>股票</option><option value={AssetType.GOLD}>黄金</option><option value={AssetType.OTHER}>其他</option></select></div><div><label className="block text-gray-500 text-xs font-bold mb-1.5">本金货币</label><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none font-bold transition-all" value={formData.currency} onChange={(e) => setFormData({ ...formData, currency: e.target.value as Currency })}><option value="CNY">CNY</option><option value="USD">USD</option><option value="HKD">HKD</option></select></div></div><div><label className="block text-gray-500 text-xs font-bold mb-1.5 flex items-center gap-2">收益货币</label><div className="relative"><select className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none font-bold transition-all" value={formData.earningsCurrency} onChange={(e) => setFormData({ ...formData, earningsCurrency: e.target.value as Currency })}><option value="CNY">CNY</option><option value="USD">USD</option><option value="HKD">HKD</option></select><ArrowRightLeft size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" /></div></div><div className="flex gap-4"><div className="flex-1"><label className="block text-gray-500 text-xs font-bold mb-1.5">年化 (%)</label><input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" value={formData.sevenDayYield} onChange={(e) => setFormData({ ...formData, sevenDayYield: e.target.value })} /></div><div className="flex-[2]"><label className="block text-gray-500 text-xs font-bold mb-1.5">备注</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 text-sm" value={formData.remark} onChange={(e) => setFormData({ ...formData, remark: e.target.value })} /></div></div></div><div className="flex gap-3 mt-8"><button onClick={onClose} className="flex-1 py-3.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-sm hover:bg-gray-200 transition-colors">取消</button><button onClick={handleSave} className="flex-1 py-3.5 rounded-xl bg-gray-900 text-white font-bold text-sm shadow-lg hover:bg-black transition-colors">保存修改</button></div></div></div>);
 };
 
 // --- APP COMPONENT ---
@@ -498,11 +496,6 @@ export default function App() {
     if (existingRecord) {
         // Simple merge: append new details, but prioritize new realWage if present
         const updatedDetails = [...existingRecord.details, ...data.details];
-        // If the new scan provides a realWage, we update the total. Otherwise we might want to recalculate sum.
-        // For consistency, let's trust the new Total if it comes from an AI scan with "Real Wage" detection.
-        const updatedTotal = data.realWage !== undefined ? data.realWage : (existingRecord.total + (data.details.reduce((s, i) => s + (i.amount||0), 0))); // This logic is tricky. 
-        // Better approach: If manual/AI overrides total, use it. Else sum up. 
-        // Given we don't store "isManualTotal" flag, let's just stick to the value passed.
         
         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'salaries', existingRecord.id), {
             details: updatedDetails,
@@ -511,8 +504,6 @@ export default function App() {
         });
     } else {
         const recordToSave = { ...data, total };
-        // Remove realWage before saving to Firestore if it's not in the type, but Firestore is flexible.
-        // It's cleaner to keep the interface consistent.
         delete recordToSave.realWage;
         await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'salaries'), recordToSave);
     }
