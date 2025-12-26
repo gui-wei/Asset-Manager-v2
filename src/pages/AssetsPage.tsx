@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   TrendingUp, Percent, Clock, BarChart4, Wallet, 
   History, Sparkles, Calendar, Pencil, Trash2, Settings,
-  ArrowUpRight, ArrowDownLeft
+  ArrowUpRight, ArrowDownLeft, RefreshCw
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
