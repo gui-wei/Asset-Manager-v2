@@ -26,12 +26,10 @@ const getIconForName = (name: string) => {
   return Coins; // 默认图标
 };
 
-// 智能匹配颜色 (扣款为红，收入为默认/绿)
+// 智能匹配颜色 (Task 2 & 3: Red for deductions, Green/Blue for income)
 const getColorForName = (name: string, amount: number) => {
-  // Priority: Check amount first. Negative = Red.
   if (amount < 0) return 'text-red-500 bg-red-50';
   
-  // Fallback to name-based logic if amount is positive but name suggests deduction 
   const n = name.toLowerCase();
   if (n.includes('扣') || n.includes('税') || n.includes('险') || n.includes('金')) {
       return 'text-orange-500 bg-orange-50'; 
@@ -49,36 +47,29 @@ const DetailRow: React.FC<{
   const Icon = getIconForName(detail.name);
   const colorClass = getColorForName(detail.name, detail.amount);
   
-  // Task 3: 符号逻辑
-  // 1. 如果是负数（AI已处理为负数），保留原样显示（自带"-"）
-  // 2. 如果是正数，仅当包含 "应发"、"实发"、"收入" 等关键词时才加 "+"
   const n = detail.name.toLowerCase();
   const isIncomeLike = n.includes('应发') || n.includes('实发') || n.includes('收入') || n.includes('合计');
 
   let prefix = '';
   if (detail.amount > 0 && isIncomeLike) prefix = '+';
   
-  // 如果金额是正数但名字里带"扣"，强制显示负号（视觉修正，虽然AI应该已经处理为负数了）
   const isDeductionName = n.includes('扣') || n.includes('税');
   if (detail.amount > 0 && isDeductionName) {
       prefix = '-'; 
   }
 
-  // 计算显示数值
   const displayValue = Math.abs(detail.amount).toLocaleString(undefined, { minimumFractionDigits: 2 });
-  
-  // 最终符号：如果是真负数，用 '-'；否则用计算出的 prefix
   const finalSign = (detail.amount < 0 || prefix === '-') ? '-' : prefix;
 
   return (
     <div className="flex justify-between items-center py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors px-2 rounded-lg">
-      <div className="flex items-center gap-3">
-        <div className={`p-2 rounded-lg ${colorClass}`}>
+      <div className="flex items-center gap-3 min-w-0">
+        <div className={`p-2 rounded-lg ${colorClass} shrink-0`}>
           <Icon size={16} />
         </div>
-        <span className="text-sm text-gray-600 font-bold">{detail.name}</span>
+        <span className="text-sm text-gray-600 font-bold truncate">{detail.name}</span>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0">
         <span className={`font-mono font-bold text-sm ${detail.amount < 0 || finalSign === '-' ? 'text-red-500' : 'text-gray-800'}`}>
           {finalSign}{displayValue}
         </span>
@@ -153,8 +144,8 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
                 >
                   <div className={`absolute inset-0 bg-indigo-50 transition-opacity duration-300 ${isExpanded ? 'opacity-100' : 'opacity-0 group-hover:opacity-30'}`}></div>
 
-                  <div className="flex items-center gap-4 relative z-10">
-                    <div className={`flex flex-col items-center justify-center w-14 h-14 rounded-2xl font-bold transition-all duration-300 border ${
+                  <div className="flex items-center gap-4 relative z-10 flex-1 min-w-0">
+                    <div className={`flex flex-col items-center justify-center w-14 h-14 rounded-2xl font-bold transition-all duration-300 border shrink-0 ${
                       isExpanded 
                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-200' 
                         : 'bg-white text-gray-700 border-gray-200 shadow-sm'
@@ -163,11 +154,11 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
                       <span className="text-xl leading-none">{parseInt(month)}<span className="text-[10px] ml-0.5">月</span></span>
                     </div>
                     
-                    <div>
-                      <h3 className={`font-bold text-lg font-mono transition-colors ${isExpanded ? 'text-indigo-900' : 'text-gray-800'}`}>
+                    <div className="flex-1 min-w-0">
+                      <h3 className={`font-bold text-lg font-mono transition-colors truncate ${isExpanded ? 'text-indigo-900' : 'text-gray-800'}`}>
                         ¥ {record.total.toLocaleString()}
                       </h3>
-                      <p className="text-xs text-gray-400 mt-1 flex items-center gap-1.5 font-medium">
+                      <p className="text-xs text-gray-400 mt-1 flex items-center gap-1.5 font-medium flex-wrap">
                         {record.remark ? <span className="truncate max-w-[100px]">{record.remark}</span> : <span className="opacity-50">无备注</span>}
                         
                         {/* 摘要标签 */}
@@ -179,7 +170,7 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
                     </div>
                   </div>
 
-                  <div className={`relative z-10 p-2 rounded-full transition-all duration-300 ${isExpanded ? 'bg-white text-indigo-600 rotate-180 shadow-sm' : 'text-gray-400 bg-transparent'}`}>
+                  <div className={`relative z-10 p-2 rounded-full transition-all duration-300 shrink-0 ${isExpanded ? 'bg-white text-indigo-600 rotate-180 shadow-sm' : 'text-gray-400 bg-transparent'}`}>
                     <ChevronDown size={20} />
                   </div>
                 </div>
@@ -199,7 +190,7 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
                   <div className="mt-5 pt-4 border-t border-gray-100 flex justify-end">
                     <button 
                       onClick={(e) => { e.stopPropagation(); onDeleteRecord(record.id); }}
-                      className="group flex items-center gap-2 text-xs text-red-500 px-4 py-2 rounded-xl hover:bg-red-50 transition-all font-bold active:scale-95"
+                      className="group flex items-center gap-2 text-xs text-red-500 px-4 py-2 rounded-xl hover:bg-red-50 transition-all font-bold active:scale-95 whitespace-nowrap"
                     >
                       <Trash2 size={14} className="group-hover:scale-110 transition-transform" /> 
                       删除记录
@@ -213,11 +204,11 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
       </div>
 
       {/* 悬浮操作按钮 */}
-      <div className="fixed bottom-24 left-0 right-0 flex justify-center z-40 pointer-events-none">
+      <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-full max-w-md flex justify-center z-40 pointer-events-none">
         <div className="pointer-events-auto bg-gray-900 text-white rounded-full shadow-2xl shadow-indigo-200/50 flex items-center p-1.5 px-6 gap-0 backdrop-blur-xl hover:scale-105 transition duration-300 border border-white/10">
           <button 
             onClick={onOpenAdd} 
-            className="flex items-center gap-2 font-bold text-sm sm:text-base py-2.5 px-4 active:opacity-70 group"
+            className="flex items-center gap-2 font-bold text-sm sm:text-base py-2.5 px-4 active:opacity-70 group whitespace-nowrap"
           >
             <div className="bg-indigo-500 p-1 rounded-full group-hover:bg-indigo-400 transition-colors">
               <Plus size={14} className="text-white" />
@@ -229,7 +220,7 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
           
           <button 
             onClick={onOpenScan} 
-            className="flex items-center gap-2 font-bold text-sm sm:text-base py-2.5 px-4 active:opacity-70 group"
+            className="flex items-center gap-2 font-bold text-sm sm:text-base py-2.5 px-4 active:opacity-70 group whitespace-nowrap"
           >
             <div className="bg-indigo-500 p-1 rounded-full group-hover:bg-indigo-400 transition-colors">
               <Camera size={14} className="text-white" />
