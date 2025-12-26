@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
-  Plus, Camera, ChevronDown, 
-  Briefcase, Home, Rocket, CreditCard, Banknote, Trophy, Calendar, Trash2, 
+  ChevronDown, Briefcase, 
+  Home, Rocket, CreditCard, Banknote, Trophy, Calendar, Trash2, 
   Coins, PiggyBank, Receipt, Sparkles
 } from 'lucide-react';
 import { SalaryRecord, SalaryDetail } from '../../types';
@@ -26,15 +26,11 @@ const getIconForName = (name: string) => {
   return Coins; // 默认图标
 };
 
-// 智能匹配颜色 (Task 2 & 3: Red for deductions, Green/Blue for income)
+// 智能匹配颜色
 const getColorForName = (name: string, amount: number) => {
   if (amount < 0) return 'text-red-500 bg-red-50';
-  
   const n = name.toLowerCase();
-  if (n.includes('扣') || n.includes('税') || n.includes('险') || n.includes('金')) {
-      return 'text-orange-500 bg-orange-50'; 
-  }
-  
+  if (n.includes('扣') || n.includes('税') || n.includes('险') || n.includes('金')) return 'text-orange-500 bg-orange-50'; 
   if (n.includes('奖') || n.includes('绩效')) return 'text-yellow-600 bg-yellow-50';
   if (n.includes('补')) return 'text-purple-500 bg-purple-50';
   if (n.includes('基本')) return 'text-blue-500 bg-blue-50';
@@ -78,7 +74,7 @@ const DetailRow: React.FC<{
   );
 };
 
-const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpenScan, onDeleteRecord }) => {
+const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onDeleteRecord }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const currentYear = new Date().getFullYear();
@@ -90,8 +86,6 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
 
   return (
     <div className="pb-32">
-      
-      {/* 顶部总览 */}
       <div className="bg-gradient-to-br from-indigo-900 to-indigo-700 pt-12 pb-20 px-6 rounded-b-[2.5rem] shadow-xl text-white relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-400 opacity-10 rounded-full translate-y-1/2 -translate-x-1/4 blur-3xl pointer-events-none"></div>
@@ -114,7 +108,6 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
         </div>
       </div>
 
-      {/* 记录列表 */}
       <div className="px-4 -mt-10 relative z-20 space-y-4">
         {sortedRecords.length === 0 ? (
           <div className="bg-white rounded-3xl p-10 text-center shadow-lg border border-gray-100 animate-slideUp">
@@ -128,8 +121,6 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
           sortedRecords.map((record) => {
             const isExpanded = expandedId === record.id;
             const [year, month] = record.date.split('-');
-            
-            // 提取前两个主要项目作为摘要显示
             const summaryItems = record.details.slice(0, 2);
             const remainingCount = record.details.length - 2;
             
@@ -161,7 +152,6 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
                       <p className="text-xs text-gray-400 mt-1 flex items-center gap-1.5 font-medium flex-wrap">
                         {record.remark ? <span className="truncate max-w-[100px]">{record.remark}</span> : <span className="opacity-50">无备注</span>}
                         
-                        {/* 摘要标签 */}
                         {summaryItems.map((item, idx) => (
                           <span key={idx} className="bg-gray-100 px-1.5 py-0.5 rounded text-[9px] truncate max-w-[60px]">{item.name}</span>
                         ))}
@@ -175,7 +165,6 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
                   </div>
                 </div>
 
-                {/* 动态详情列表 */}
                 <div 
                   className={`transition-all duration-300 ease-in-out bg-white border-t border-gray-50 px-5 overflow-hidden ${
                     isExpanded ? 'max-h-[1000px] opacity-100 py-4' : 'max-h-0 opacity-0 py-0'
@@ -202,33 +191,7 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpe
           })
         )}
       </div>
-
-      {/* 悬浮操作按钮 */}
-      <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-full max-w-md flex justify-center z-40 pointer-events-none">
-        <div className="pointer-events-auto bg-gray-900 text-white rounded-full shadow-2xl shadow-indigo-200/50 flex items-center p-1.5 px-6 gap-0 backdrop-blur-xl hover:scale-105 transition duration-300 border border-white/10">
-          <button 
-            onClick={onOpenAdd} 
-            className="flex items-center gap-2 font-bold text-sm sm:text-base py-2.5 px-4 active:opacity-70 group whitespace-nowrap"
-          >
-            <div className="bg-indigo-500 p-1 rounded-full group-hover:bg-indigo-400 transition-colors">
-              <Plus size={14} className="text-white" />
-            </div>
-            <span>记一笔</span>
-          </button>
-          
-          <div className="w-px h-6 bg-gray-700 mx-2"></div>
-          
-          <button 
-            onClick={onOpenScan} 
-            className="flex items-center gap-2 font-bold text-sm sm:text-base py-2.5 px-4 active:opacity-70 group whitespace-nowrap"
-          >
-            <div className="bg-indigo-500 p-1 rounded-full group-hover:bg-indigo-400 transition-colors">
-              <Camera size={14} className="text-white" />
-            </div>
-            <span>AI 识别</span>
-          </button>
-        </div>
-      </div>
+      {/* 底部悬浮按钮已移除，统一移至 App.tsx */}
     </div>
   );
 };
