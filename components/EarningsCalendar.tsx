@@ -46,15 +46,16 @@ const EarningsCalendar: React.FC<EarningsCalendarProps> = ({ asset, onClose }) =
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
-      <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
-        <div className="bg-[#07c160] p-4 flex justify-between items-center text-white">
-          <h3 className="font-bold text-lg">{asset.productName} 收益日历</h3>
-          <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors">
+      <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="bg-[#07c160] p-4 flex justify-between items-center text-white shrink-0">
+          <h3 className="font-bold text-lg truncate pr-4">{asset.productName} 收益日历</h3>
+          <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors shrink-0">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
         </div>
         
-        <div className="p-4">
+        <div className="p-4 overflow-y-auto">
           <div className="flex justify-between items-center mb-4">
             <button onClick={prevMonth} className="p-2 hover:bg-gray-100 rounded-full transition-colors">&lt;</button>
             <span className="font-bold text-gray-800">{year}年 {month + 1}月</span>
@@ -69,7 +70,7 @@ const EarningsCalendar: React.FC<EarningsCalendarProps> = ({ asset, onClose }) =
 
           <div className="grid grid-cols-7 gap-1">
             {days.map((day, idx) => {
-              if (!day) return <div key={`empty-${idx}`} />;
+              if (!day) return <div key={`empty-${idx}`} className="min-h-14" />; // Ensure empty cells maintain grid structure
               const { earning, deposits, withdrawals } = getEventsForDay(day);
               
               const hasEarning = earning !== 0;
@@ -77,26 +78,26 @@ const EarningsCalendar: React.FC<EarningsCalendarProps> = ({ asset, onClose }) =
               const hasWithdrawal = withdrawals > 0;
               
               return (
-                <div key={day} className="flex flex-col items-center justify-start pt-1 h-14 rounded-lg bg-gray-50 border border-gray-100 relative overflow-hidden group hover:border-blue-200 transition-colors">
-                  <span className="text-[10px] font-medium text-gray-400 mb-0.5 group-hover:text-blue-500">{day}</span>
+                <div key={day} className="flex flex-col items-center justify-start p-1 min-h-14 h-auto rounded-lg bg-gray-50 border border-gray-100 relative overflow-hidden group hover:border-blue-200 transition-colors">
+                  <span className="text-[10px] font-medium text-gray-400 mb-0.5 group-hover:text-blue-500 leading-none">{day}</span>
                   
                   {/* Earnings (Red for positive, Green for negative) */}
                   {hasEarning && (
-                     <span className={`text-[9px] font-bold leading-tight tracking-tighter ${earning > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                     <span className={`text-[9px] font-bold leading-none tracking-tighter whitespace-nowrap mt-0.5 ${earning > 0 ? 'text-red-500' : 'text-green-600'}`}>
                        {earning > 0 ? '' : ''}{Math.abs(earning).toFixed(0)}
                      </span>
                   )}
 
                   {/* Deposits (Blue) */}
                   {hasDeposit && (
-                     <span className="text-[9px] font-bold text-blue-500 leading-tight tracking-tighter">
+                     <span className="text-[9px] font-bold text-blue-500 leading-none tracking-tighter whitespace-nowrap mt-0.5">
                        +{deposits.toLocaleString(undefined, {maximumFractionDigits:0})}
                      </span>
                   )}
 
-                  {/* Withdrawals (Orange) - New Feature */}
+                  {/* Withdrawals (Orange) */}
                   {hasWithdrawal && (
-                     <span className="text-[9px] font-bold text-orange-500 leading-tight tracking-tighter">
+                     <span className="text-[9px] font-bold text-orange-500 leading-none tracking-tighter whitespace-nowrap mt-0.5">
                        -{withdrawals.toLocaleString(undefined, {maximumFractionDigits:0})}
                      </span>
                   )}
@@ -105,7 +106,7 @@ const EarningsCalendar: React.FC<EarningsCalendarProps> = ({ asset, onClose }) =
             })}
           </div>
           
-          <div className="mt-4 flex gap-3 justify-center text-[10px] text-gray-500 pt-3 border-t border-gray-100">
+          <div className="mt-4 flex gap-3 justify-center text-[10px] text-gray-500 pt-3 border-t border-gray-100 flex-wrap">
              <div className="flex items-center gap-1">
                <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span> 收益
              </div>
@@ -115,7 +116,6 @@ const EarningsCalendar: React.FC<EarningsCalendarProps> = ({ asset, onClose }) =
              <div className="flex items-center gap-1">
                <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> 存入
              </div>
-             {/* 新增图例 */}
              <div className="flex items-center gap-1">
                <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span> 赎回
              </div>
