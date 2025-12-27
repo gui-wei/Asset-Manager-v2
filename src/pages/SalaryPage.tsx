@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
-  ChevronDown, Briefcase, 
-  Home, Rocket, CreditCard, Banknote, Trophy, Calendar, Trash2, 
+  Plus, Camera, ChevronDown, 
+  Briefcase, Home, Rocket, CreditCard, Banknote, Trophy, Calendar, Trash2, 
   Coins, PiggyBank, Receipt, Sparkles
 } from 'lucide-react';
 import { SalaryRecord, SalaryDetail } from '../../types';
@@ -26,11 +26,15 @@ const getIconForName = (name: string) => {
   return Coins; // 默认图标
 };
 
-// 智能匹配颜色
+// 智能匹配颜色 (Task 2 & 3: Red for deductions, Green/Blue for income)
 const getColorForName = (name: string, amount: number) => {
   if (amount < 0) return 'text-red-500 bg-red-50';
+  
   const n = name.toLowerCase();
-  if (n.includes('扣') || n.includes('税') || n.includes('险') || n.includes('金')) return 'text-orange-500 bg-orange-50'; 
+  if (n.includes('扣') || n.includes('税') || n.includes('险') || n.includes('金')) {
+      return 'text-orange-500 bg-orange-50'; 
+  }
+  
   if (n.includes('奖') || n.includes('绩效')) return 'text-yellow-600 bg-yellow-50';
   if (n.includes('补')) return 'text-purple-500 bg-purple-50';
   if (n.includes('基本')) return 'text-blue-500 bg-blue-50';
@@ -74,7 +78,7 @@ const DetailRow: React.FC<{
   );
 };
 
-const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onDeleteRecord }) => {
+const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onOpenAdd, onOpenScan, onDeleteRecord }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const currentYear = new Date().getFullYear();
@@ -86,6 +90,8 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onDeleteRecord }
 
   return (
     <div className="pb-32">
+      
+      {/* 顶部总览 */}
       <div className="bg-gradient-to-br from-indigo-900 to-indigo-700 pt-12 pb-20 px-6 rounded-b-[2.5rem] shadow-xl text-white relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-400 opacity-10 rounded-full translate-y-1/2 -translate-x-1/4 blur-3xl pointer-events-none"></div>
@@ -108,6 +114,7 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onDeleteRecord }
         </div>
       </div>
 
+      {/* 记录列表 */}
       <div className="px-4 -mt-10 relative z-20 space-y-4">
         {sortedRecords.length === 0 ? (
           <div className="bg-white rounded-3xl p-10 text-center shadow-lg border border-gray-100 animate-slideUp">
@@ -121,6 +128,8 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onDeleteRecord }
           sortedRecords.map((record) => {
             const isExpanded = expandedId === record.id;
             const [year, month] = record.date.split('-');
+            
+            // 提取前两个主要项目作为摘要显示
             const summaryItems = record.details.slice(0, 2);
             const remainingCount = record.details.length - 2;
             
@@ -152,6 +161,7 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onDeleteRecord }
                       <p className="text-xs text-gray-400 mt-1 flex items-center gap-1.5 font-medium flex-wrap">
                         {record.remark ? <span className="truncate max-w-[100px]">{record.remark}</span> : <span className="opacity-50">无备注</span>}
                         
+                        {/* 摘要标签 */}
                         {summaryItems.map((item, idx) => (
                           <span key={idx} className="bg-gray-100 px-1.5 py-0.5 rounded text-[9px] truncate max-w-[60px]">{item.name}</span>
                         ))}
@@ -160,11 +170,26 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onDeleteRecord }
                     </div>
                   </div>
 
-                  <div className={`relative z-10 p-2 rounded-full transition-all duration-300 shrink-0 ${isExpanded ? 'bg-white text-indigo-600 rotate-180 shadow-sm' : 'text-gray-400 bg-transparent'}`}>
-                    <ChevronDown size={20} />
+                  {/* 右侧操作区：删除按钮 + 展开箭头 */}
+                  <div className="relative z-10 flex items-center gap-1 shrink-0">
+                    <button 
+                      onClick={(e) => { 
+                        e.stopPropagation(); // 阻止冒泡，避免触发展开
+                        onDeleteRecord(record.id); 
+                      }}
+                      className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                      aria-label="删除记录"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                    
+                    <div className={`p-2 rounded-full transition-all duration-300 ${isExpanded ? 'bg-white text-indigo-600 rotate-180 shadow-sm' : 'text-gray-400 bg-transparent'}`}>
+                      <ChevronDown size={20} />
+                    </div>
                   </div>
                 </div>
 
+                {/* 动态详情列表 */}
                 <div 
                   className={`transition-all duration-300 ease-in-out bg-white border-t border-gray-50 px-5 overflow-hidden ${
                     isExpanded ? 'max-h-[1000px] opacity-100 py-4' : 'max-h-0 opacity-0 py-0'
@@ -176,6 +201,7 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onDeleteRecord }
                     ))}
                   </div>
                   
+                  {/* 底部也可以保留一个删除按钮，适应不同用户习惯 */}
                   <div className="mt-5 pt-4 border-t border-gray-100 flex justify-end">
                     <button 
                       onClick={(e) => { e.stopPropagation(); onDeleteRecord(record.id); }}
@@ -191,6 +217,7 @@ const SalaryPage: React.FC<SalaryPageProps> = ({ salaryRecords, onDeleteRecord }
           })
         )}
       </div>
+
       {/* 底部悬浮按钮已移除，统一移至 App.tsx */}
     </div>
   );
