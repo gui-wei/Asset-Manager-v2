@@ -35,6 +35,7 @@ import ProfilePage from './src/pages/ProfilePage';
 import SalaryPage from './src/pages/SalaryPage';
 import SmartInput from './components/SmartInput';
 
+// [FIX] Correct Import for analyzeSalaryScreenshots (Plural)
 import { analyzeEarningsScreenshot, analyzeSalaryScreenshots, AIAssetRecord } from './services/gemini';
 import { Asset, Transaction, AssetType, Currency, SalaryRecord, SalaryDetail } from './types';
 
@@ -189,7 +190,7 @@ const AddSalaryModal: React.FC<{
   isOpen: boolean; 
   onClose: () => void; 
   onSave: (data: Omit<SalaryRecord, 'id' | 'total'>) => void;
-  onScan: () => void;
+  onScan: () => void; // [TASK 3] Added callback for AI Scan button
   initialData?: Partial<Omit<SalaryRecord, 'id' | 'total'> & { realWage?: number }>;
 }> = ({ isOpen, onClose, onSave, onScan, initialData }) => {
   const [date, setDate] = useState(initialData?.date || new Date().toISOString().slice(0, 7)); // YYYY-MM
@@ -337,6 +338,7 @@ const AddSalaryModal: React.FC<{
   );
 };
 
+// ... (AIScanModal & Edit Modals remain same, including for brevity but key logic is in AddSalaryModal and App)
 const AIScanModal: React.FC<{
   isOpen: boolean; onClose: () => void; onUpload: () => void; isProcessing: boolean;
   assets: Asset[]; targetAssetId: string; setTargetAssetId: (id: string) => void;
@@ -408,6 +410,7 @@ const EditAssetInfoModal: React.FC<{ asset: Asset; onSave: (asset: Asset) => voi
 };
 
 // --- APP COMPONENT ---
+
 // @ts-ignore
 const firebaseConfig = {
   apiKey: "AIzaSyCcWjG9efLujQ2dc4Aunn4TQhOsWfL0K5I",
